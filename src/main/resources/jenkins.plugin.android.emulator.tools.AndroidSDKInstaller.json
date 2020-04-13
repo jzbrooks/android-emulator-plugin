@@ -1,0 +1,19 @@
+{
+  "list": [
+    {
+      "id": "cmdline-tools:1.0",
+      "url": "https://dl.google.com/android/repository/commandlinetools-{os}-6200805_latest.zip",
+      "name": "Command-line Tools 1.0"
+    },
+    {
+      "id": "build-tools:26.1.1",
+      "url": "https://dl.google.com/android/repository/sdk-tools-{os}-4333796.zip",
+      "name": "Build Tools 26.1.1"
+    },
+    {
+      "id": "build-tools:26.0.1",
+      "url": "https://dl.google.com/android/repository/sdk-tools-{os}-3859397.zip",
+      "name": "Build Tools 26.0.1"
+    }
+  ]
+}

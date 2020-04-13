@@ -23,19 +23,29 @@
  */
 package jenkins.plugin.android.emulator.tools;
 
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import javax.annotation.Nonnull;
 
+import org.apache.commons.io.IOUtils;
+import org.apache.tools.ant.filters.StringInputStream;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 import hudson.Extension;
+import hudson.FilePath;
+import hudson.Launcher;
+import hudson.Launcher.ProcStarter;
 import hudson.model.Node;
+import hudson.model.TaskListener;
 import hudson.tools.DownloadFromUrlInstaller;
 import hudson.tools.ToolInstallation;
 import jenkins.plugin.android.emulator.Messages;
+import net.sf.json.JSONObject;
 
 /**
  * Automatic tools installer from google.
@@ -46,25 +56,67 @@ import jenkins.plugin.android.emulator.Messages;
  */
 public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
 
+    public class AndroidSDKInstallable extends NodeSpecificInstallable {
+
+        public AndroidSDKInstallable(Installable inst) {
+            super(inst);
+        }
+
+        @Override
+        public NodeSpecificInstallable forNode(Node node, TaskListener log) throws IOException, InterruptedException {
+            if (url == null) {
+                throw new IllegalStateException("Installable " + name + " does not have a valid URL");
+            }
+            platform = Platform.of(node);
+            url = url.replace("{os}", platform.name().toLowerCase());
+            return this;
+        }
+        
+    }
+
+    private Platform platform;
+
     @DataBoundConstructor
     public AndroidSDKInstaller(String id) {
         super(id);
     }
 
-    public Installable getInstallable(Node node) throws IOException {
-        Installable installable = getInstallable();
+    @Override
+    public Installable getInstallable() throws IOException {
+        Installable installable = super.getInstallable();
         if (installable == null) {
             return null;
         }
+        return new AndroidSDKInstallable(installable);
+    }
 
-        // Cloning the installable since we're going to update its url (not cloning it wouldn't be threadsafe)
-        DownloadFromUrlInstaller.Installable clone = new DownloadFromUrlInstaller.Installable();
-        clone.id = installable.id;
-        clone.url = installable.url;
-        clone.name = installable.name;
+    @Override
+    public FilePath performInstallation(ToolInstallation tool, Node node, TaskListener log) throws IOException, InterruptedException {
+        FilePath expected = super.performInstallation(tool, node, log);
+        installBasePackages(expected, log);
+        return expected;
+    }
 
-        clone.url = null;// TODO fix URL based on node platform
-        return clone;
+    private void installBasePackages(FilePath sdkHome, TaskListener log) throws IOException, InterruptedException {
+        FilePath sdkmanager = sdkHome.child("tools").child("bin").child("sdkmanager" + platform.extension);
+
+        Launcher launcher = sdkmanager.createLauncher(log);
+        ProcStarter starter = launcher.launch().stdout(log) //
+                .stdin(new StringInputStream("y\r\ny\r\ny\r\ny\r\n")) //
+                .cmds(new File(sdkmanager.getRemote()), //
+                        "--sdk_root=\"" + sdkHome.getRemote() + "\"", //
+                        "platform-tools", "emulator", "extras;android;m2repository", "extras;google;m2repository");
+        starter = starter.pwd(sdkHome);
+        int exitCode = starter.join();
+        if (exitCode != 0) {
+            throw new IOException("sdkmanager failed. exit code: " + exitCode + ".");
+        }
+    }
+
+    @Override
+    protected FilePath findPullUpDirectory(FilePath root) throws IOException, InterruptedException {
+        // do not pullup, keep original structure
+        return null;
     }
 
     @Extension
@@ -77,8 +129,17 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
         @Nonnull
         @Override
         public List<? extends Installable> getInstallables() throws IOException {
-            // TODO list all available SDKs
-            return Collections.emptyList();
+            List<Installable> installables = Collections.emptyList();
+
+            // latest available here https://developer.android.com/studio/index.html#command-tools
+            try (InputStream is = getClass().getResourceAsStream("/" + getId() + ".json")) {
+                if (is != null) {
+                    String data = IOUtils.toString(is);
+                    JSONObject json = JSONObject.fromObject(data);
+                    installables = Arrays.asList(((InstallableList) JSONObject.toBean(json, InstallableList.class)).list);
+                }
+            }
+            return installables;
         }
 
         @Override

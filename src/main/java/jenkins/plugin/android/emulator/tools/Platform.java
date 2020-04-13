@@ -35,7 +35,7 @@ import jenkins.plugin.android.emulator.Messages;
  * Supported platform.
  */
 public enum Platform {
-    LINUX("sh", "bin"), WINDOWS("bat", "bin"), OSX("sh", "bin");
+    LINUX(".sh", "bin"), WINDOWS(".bat", "bin"), OSX(".sh", "bin");
 
     /**
      * Choose the extension file name suitable to run cli commands.
@@ -68,7 +68,7 @@ public enum Platform {
         try {
             Computer computer = node.toComputer();
             if (computer == null) {
-                throw new DetectionFailedException(Messages.SystemTools_nodeNotAvailable(node.getDisplayName()));
+                throw new DetectionFailedException(Messages.nodeNotAvailable());
             }
             return detect(computer.getSystemProperties());
         } catch (IOException | InterruptedException e) {

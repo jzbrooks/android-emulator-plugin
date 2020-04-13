@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.commons.lang.StringUtils;
+import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 
 import hudson.EnvVars;
@@ -69,9 +70,9 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
         @Override
         public String call() throws IOException {
             Platform currentPlatform = getPlatform();
-            File exe = new File(getBin(), command + currentPlatform.extension);
-            if (exe.exists()) {
-                return exe.getPath();
+            File cmd = new File(getBin(), command + currentPlatform.extension);
+            if (cmd.exists()) {
+                return cmd.getPath();
             }
             return null;
         }
@@ -80,6 +81,7 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
     private final static String CMD_SDK_MANAGER = "sdkmanager";
     private Platform platform;
 
+    @DataBoundConstructor
     public AndroidSDKInstallation(String name, String home, List<? extends ToolProperty<?>> properties, Platform platform) {
         super(name, home, properties);
         this.platform = platform;
@@ -114,6 +116,13 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
         return channel.call(new LookupExecuteCallable(CMD_SDK_MANAGER));
     }
 
+    @Override
+    public void buildEnvVars(EnvVars env) {
+        // define SDK_NOME, ANDROID_HOME and other useful directories
+        // FIXME add variables like ANDROID_HOME
+        super.buildEnvVars(env);
+    }
+
     /**
      * Calculate the tools bin folder based on current Node platform. We can't
      * use {@link Computer#currentComputer()} because it's always null in case of
@@ -134,12 +143,12 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
         if (!StringUtils.isBlank(currentPlatform.binFolder)) {
             switch (currentPlatform) {
             case WINDOWS:
-                bin += '\\' + currentPlatform.binFolder;
+                bin += "\\tools\\" + currentPlatform.binFolder;
                 break;
             case LINUX:
             case OSX:
             default:
-                bin += '/' + currentPlatform.binFolder;
+                bin += "/tools/" + currentPlatform.binFolder;
             }
         }
 
@@ -155,7 +164,7 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
             if (computer != null) {
                 Node node = computer.getNode();
                 if (node == null) {
-                    throw new DetectionFailedException(Messages.AndroidSDKInstallation_nodeOffline());
+                    throw new DetectionFailedException(Messages.nodeNotAvailable());
                 }
 
                 currentPlatform = Platform.of(node);
@@ -205,4 +214,5 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
         }
 
     }
+
 }

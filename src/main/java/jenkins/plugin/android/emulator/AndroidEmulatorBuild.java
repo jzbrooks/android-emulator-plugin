@@ -28,23 +28,26 @@ import java.io.IOException;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 
+import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.QueryParameter;
 
 import hudson.AbortException;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Util;
 import hudson.model.AbstractProject;
 import hudson.model.Computer;
 import hudson.model.Node;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.tasks.BuildWrapperDescriptor;
+import hudson.util.FormValidation;
 import jenkins.plugin.android.emulator.tools.AndroidSDKInstallation;
 import jenkins.tasks.SimpleBuildWrapper;
-import jenkins.tasks.SimpleBuildWrapper.Context;
 
 public class AndroidEmulatorBuild extends SimpleBuildWrapper {
 
@@ -69,11 +72,13 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
         }
     }
 
+    private final String osVersion;
     private final String emulatorTool;
 
     @DataBoundConstructor
-    public AndroidEmulatorBuild(@CheckForNull String emulatorTool) {
-        this.emulatorTool = emulatorTool;
+    public AndroidEmulatorBuild(@CheckForNull String emulatorTool, String osVersion) {
+        this.emulatorTool = Util.fixEmptyAndTrim(emulatorTool);
+        this.osVersion = Util.fixEmptyAndTrim(osVersion);
     }
 
     @Override
@@ -98,6 +103,11 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
             throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(sdk.getHome()));
         }
         sdk.buildEnvVars(new EnvVarsAdapter(context));
+
+        EnvVars env = initialEnvironment.overrideAll(context.getEnv());
+
+        EmulatorConfig config = new EmulatorConfig();
+        config.setOSVersion(Util.replaceMacro(osVersion, env));
     }
 
     /**
@@ -107,6 +117,15 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
      */
     public String getEmulatorTool() {
         return emulatorTool;
+    }
+
+    /**
+     * Needed for syntax snippet generator.
+     *
+     * @return the Androis O.S. version.
+     */
+    public String getOsVersion() {
+        return osVersion;
     }
 
     @Symbol("android-emulator")
@@ -122,5 +141,13 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
         public String getDisplayName() {
             return Messages.AndroidEmulatorBuild_displayName();
         }
+
+        public FormValidation doCheckOsVersion(@QueryParameter @CheckForNull String osVersion) {
+            if (StringUtils.isBlank(osVersion)) {
+                return FormValidation.error(hudson.plugins.android_emulator.Messages.OS_VERSION_REQUIRED());
+            }
+            return FormValidation.ok();
+        }
+
     }
 }

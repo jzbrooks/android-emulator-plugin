@@ -23,15 +23,17 @@ THE SOFTWARE.
 -->
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
-    <j:invokeStatic var="installations" className="jenkins.plugin.android.emulator.AndroidSDKUtil" method="getInstallations" />
 
-    <j:if test="${installations.size() gt 0}">
-        <f:entry title="${%buildTools.title}" description="${%buildTools.description}">
-            <select class="setting-input" name="_.emulatorTool">
-                <j:forEach var="tool" items="${installations}">
-                    <f:option selected="${tool.name==instance.emulatorTool}">${tool.name}</f:option>
-                </j:forEach>
-            </select>
-        </f:entry>
-    </j:if>
+    <j:invokeStatic var="installations" className="jenkins.plugin.android.emulator.AndroidSDKUtil" method="getInstallations" />
+    <f:entry title="${%buildTools.title}" description="${%buildTools.description}">
+        <select class="setting-input" name="_.emulatorTool">
+            <j:forEach var="tool" items="${installations}">
+                <f:option selected="${tool.name==instance.emulatorTool}">${tool.name}</f:option>
+            </j:forEach>
+        </select>
+    </f:entry>
+
+    <f:entry title="${%osVersion.title}">
+        <f:textbox field="osVersion" />
+    </f:entry>
 </j:jelly>

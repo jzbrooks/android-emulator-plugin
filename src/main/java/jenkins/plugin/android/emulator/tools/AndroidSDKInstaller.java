@@ -26,6 +26,7 @@ package jenkins.plugin.android.emulator.tools;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -33,17 +34,26 @@ import java.util.List;
 import javax.annotation.Nonnull;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.tools.ant.filters.StringInputStream;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.QueryParameter;
 
+import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Launcher.ProcStarter;
+import hudson.model.Item;
 import hudson.model.Node;
 import hudson.model.TaskListener;
+import hudson.plugins.android_emulator.Constants;
 import hudson.tools.DownloadFromUrlInstaller;
 import hudson.tools.ToolInstallation;
+import hudson.util.ListBoxModel;
+import hudson.util.ListBoxModel.Option;
+import jenkins.plugin.android.emulator.AndroidSDKConstants;
 import jenkins.plugin.android.emulator.Messages;
 import net.sf.json.JSONObject;
 
@@ -67,18 +77,49 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
             if (url == null) {
                 throw new IllegalStateException("Installable " + name + " does not have a valid URL");
             }
+
             platform = Platform.of(node);
-            url = url.replace("{os}", platform.name().toLowerCase());
+            String osName = platform.name().toLowerCase();
+            switch (platform) {
+            case WINDOWS:
+                osName = id.startsWith("cmdline-tools") ? "win" : osName;
+                break;
+            default:
+                // leave default
+                break;
+            }
+            url = url.replace("{os}", osName);
+
             return this;
         }
         
     }
 
-    private Platform platform;
+    public enum Channel {
+        STABLE(0, "Stable"), BETA(1, "Beta"), DEV(2, "Dev"), CANARY(3, "Canary");
+
+        private final int value;
+        private final String label;
+
+        Channel(int value, String label) {
+            this.value = value;
+            this.label = label;
+        }
+    }
+
+    private final static List<String> DEFAULT_PACKAGES = Arrays.asList("platform-tools", "emulator", "extras;android;m2repository", "extras;google;m2repository");
+
+    private transient Platform platform;
+    private final Channel channel;
 
     @DataBoundConstructor
-    public AndroidSDKInstaller(String id) {
+    public AndroidSDKInstaller(String id, Channel channel) {
         super(id);
+        this.channel = channel;
+    }
+
+    public Channel getChannel() {
+        return channel;
     }
 
     @Override
@@ -93,20 +134,52 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
     @Override
     public FilePath performInstallation(ToolInstallation tool, Node node, TaskListener log) throws IOException, InterruptedException {
         FilePath expected = super.performInstallation(tool, node, log);
+
+        writeConfigurations(expected);
         installBasePackages(expected, log);
         return expected;
     }
 
-    private void installBasePackages(FilePath sdkHome, TaskListener log) throws IOException, InterruptedException {
-        FilePath sdkmanager = sdkHome.child("tools").child("bin").child("sdkmanager" + platform.extension);
+    private void writeConfigurations(FilePath sdkRoot) throws IOException, InterruptedException {
+        FilePath sdkHome = getSDKHome(sdkRoot);
+        sdkHome.mkdirs();
+
+        // configure DDMS
+        FilePath ddmsConfig = sdkHome.child(AndroidSDKConstants.DDMS_CONFIG);
+        if (!ddmsConfig.exists()) {
+            String settings = "pingOptIn=false\n";
+            settings += "pingId=0\n";
+            ddmsConfig.write(settings.toString(), "UTF-8");
+        }
+
+        // configure for no local repositories
+        FilePath localRepoCfg = sdkHome.child(AndroidSDKConstants.LOCAL_REPO_CONFIG);
+        if (!localRepoCfg.exists()) {
+            localRepoCfg.write("count=0", "UTF-8");
+        }
+    }
+
+    private void installBasePackages(FilePath sdkRoot, TaskListener log) throws IOException, InterruptedException {
+        FilePath sdkmanager = sdkRoot.child("tools").child("bin").child("sdkmanager" + platform.extension);
+
+        // prepare environment variables
+        EnvVars env = new EnvVars();
+        env.put(Constants.ENV_VAR_ANDROID_SDK_HOME, sdkRoot.getRemote());
+
+        // prepare CLI arguments
+        List<String> args = new ArrayList<String>();
+        args.add("--sdk_root=\"" + sdkRoot.getRemote() + "\"");
+        if (channel != null) {
+            args.add("--channel=\"" + channel.value + "\"");
+        }
+        args.addAll(DEFAULT_PACKAGES);
 
         Launcher launcher = sdkmanager.createLauncher(log);
-        ProcStarter starter = launcher.launch().stdout(log) //
-                .stdin(new StringInputStream("y\r\ny\r\ny\r\ny\r\n")) //
-                .cmds(new File(sdkmanager.getRemote()), //
-                        "--sdk_root=\"" + sdkHome.getRemote() + "\"", //
-                        "platform-tools", "emulator", "extras;android;m2repository", "extras;google;m2repository");
-        starter = starter.pwd(sdkHome);
+        ProcStarter starter = launcher.launch().envs(env) //
+                .stdout(log) //
+                .stdin(new StringInputStream(StringUtils.repeat("y", "\r\n", DEFAULT_PACKAGES.size()))) //
+                .pwd(sdkRoot) //
+                .cmds(new File(sdkmanager.getRemote()), args.toArray(new String[0]));
         int exitCode = starter.join();
         if (exitCode != 0) {
             throw new IOException("sdkmanager failed. exit code: " + exitCode + ".");
@@ -119,8 +192,17 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
         return null;
     }
 
+    private FilePath getSDKHome(FilePath sdkRoot) {
+        return sdkRoot.child(AndroidSDKConstants.ANDROID_CACHE);
+    }
+
     @Extension
     public static final class DescriptorImpl extends DownloadFromUrlInstaller.DescriptorImpl<AndroidSDKInstaller> { // NOSONAR
+        @Override
+        public boolean isApplicable(Class<? extends ToolInstallation> toolType) {
+            return toolType == AndroidSDKInstallation.class;
+        }
+
         @Override
         public String getDisplayName() {
             return Messages.AndroidSDKInstaller_displayName();
@@ -142,9 +224,12 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
             return installables;
         }
 
-        @Override
-        public boolean isApplicable(Class<? extends ToolInstallation> toolType) {
-            return toolType == AndroidSDKInstallation.class;
+        public ListBoxModel doFillChannelItems(final @AncestorInPath Item item, @QueryParameter String channel) {
+            ListBoxModel channels = new ListBoxModel();
+            for (Channel ch : Channel.values()) {
+                channels.add(new Option(ch.label, ch.name(), ch.name().equals(channel)));
+            }
+            return channels;
         }
     }
 }

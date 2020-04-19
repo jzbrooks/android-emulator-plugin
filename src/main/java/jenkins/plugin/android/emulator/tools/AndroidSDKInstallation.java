@@ -39,6 +39,7 @@ import hudson.model.Computer;
 import hudson.model.EnvironmentSpecific;
 import hudson.model.Node;
 import hudson.model.TaskListener;
+import hudson.plugins.android_emulator.Constants;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.NodeSpecific;
 import hudson.tools.ToolDescriptor;
@@ -46,6 +47,7 @@ import hudson.tools.ToolInstallation;
 import hudson.tools.ToolInstaller;
 import hudson.tools.ToolProperty;
 import jenkins.plugin.android.emulator.Messages;
+import jenkins.plugin.android.emulator.tools.AndroidSDKInstaller.Channel;
 import jenkins.security.MasterToSlaveCallable;
 import net.sf.json.JSONObject;
 
@@ -120,6 +122,7 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
     public void buildEnvVars(EnvVars env) {
         // define SDK_NOME, ANDROID_HOME and other useful directories
         // FIXME add variables like ANDROID_HOME
+        env.put(Constants.ENV_VAR_ANDROID_SDK_ROOT, getHome());
         super.buildEnvVars(env);
     }
 
@@ -181,7 +184,6 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
 
     @Extension
     public static class DescriptorImpl extends ToolDescriptor<AndroidSDKInstallation> {
-
         public DescriptorImpl() {
             // load installations at Jenkins startup
             load();
@@ -194,7 +196,7 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
 
         @Override
         public List<? extends ToolInstaller> getDefaultInstallers() {
-            return Collections.singletonList(new AndroidSDKInstaller(null));
+            return Collections.singletonList(new AndroidSDKInstaller(null, Channel.STABLE));
         }
 
         /*

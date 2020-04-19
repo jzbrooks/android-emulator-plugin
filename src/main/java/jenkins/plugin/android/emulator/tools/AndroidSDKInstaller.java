@@ -23,10 +23,8 @@
  */
 package jenkins.plugin.android.emulator.tools;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -53,8 +51,11 @@ import hudson.tools.DownloadFromUrlInstaller;
 import hudson.tools.ToolInstallation;
 import hudson.util.ListBoxModel;
 import hudson.util.ListBoxModel.Option;
+import jenkins.model.Jenkins;
 import jenkins.plugin.android.emulator.AndroidSDKConstants;
 import jenkins.plugin.android.emulator.Messages;
+import jenkins.plugin.android.emulator.sdk.cli.SDKManagerCLIBuilder;
+import jenkins.plugin.android.emulator.sdk.cli.SDKManagerCLIBuilder.CLICommand;
 import net.sf.json.JSONObject;
 
 /**
@@ -105,9 +106,17 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
             this.value = value;
             this.label = label;
         }
+
+        public int getValue() {
+            return value;
+        }
+
+        public String getLabel() {
+            return label;
+        }
     }
 
-    private final static List<String> DEFAULT_PACKAGES = Arrays.asList("platform-tools", "emulator", "extras;android;m2repository", "extras;google;m2repository");
+    private static final List<String> DEFAULT_PACKAGES = Arrays.asList("platform-tools", "emulator", "extras;android;m2repository", "extras;google;m2repository");
 
     private transient Platform platform;
     private final Channel channel;
@@ -162,24 +171,25 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
     private void installBasePackages(FilePath sdkRoot, TaskListener log) throws IOException, InterruptedException {
         FilePath sdkmanager = sdkRoot.child("tools").child("bin").child("sdkmanager" + platform.extension);
 
+        String remoteSDKRoot = sdkRoot.getRemote();
+
+        CLICommand cmd = SDKManagerCLIBuilder.create(sdkmanager.getRemote(), log) //
+                .proxy(Jenkins.get().proxy) //
+                .sdkRoot(remoteSDKRoot) //
+                .channel(channel) //
+                .install(DEFAULT_PACKAGES);
+
         // prepare environment variables
         EnvVars env = new EnvVars();
-        env.put(Constants.ENV_VAR_ANDROID_SDK_HOME, sdkRoot.getRemote());
-
-        // prepare CLI arguments
-        List<String> args = new ArrayList<String>();
-        args.add("--sdk_root=\"" + sdkRoot.getRemote() + "\"");
-        if (channel != null) {
-            args.add("--channel=\"" + channel.value + "\"");
-        }
-        args.addAll(DEFAULT_PACKAGES);
+        env.put(Constants.ENV_VAR_ANDROID_SDK_HOME, remoteSDKRoot);
+        env.putAll(cmd.env());
 
         Launcher launcher = sdkmanager.createLauncher(log);
         ProcStarter starter = launcher.launch().envs(env) //
                 .stdout(log) //
                 .stdin(new StringInputStream(StringUtils.repeat("y", "\r\n", DEFAULT_PACKAGES.size()))) //
                 .pwd(sdkRoot) //
-                .cmds(new File(sdkmanager.getRemote()), args.toArray(new String[0]));
+                .cmds(cmd.arguments());
         int exitCode = starter.join();
         if (exitCode != 0) {
             throw new IOException("sdkmanager failed. exit code: " + exitCode + ".");
@@ -227,7 +237,7 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
         public ListBoxModel doFillChannelItems(final @AncestorInPath Item item, @QueryParameter String channel) {
             ListBoxModel channels = new ListBoxModel();
             for (Channel ch : Channel.values()) {
-                channels.add(new Option(ch.label, ch.name(), ch.name().equals(channel)));
+                channels.add(new Option(ch.getLabel(), ch.name(), ch.name().equals(channel)));
             }
             return channels;
         }

@@ -120,9 +120,8 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
 
     @Override
     public void buildEnvVars(EnvVars env) {
-        // define SDK_NOME, ANDROID_HOME and other useful directories
-        // FIXME add variables like ANDROID_HOME
         env.put(Constants.ENV_VAR_ANDROID_SDK_ROOT, getHome());
+        env.put(Constants.ENV_VAR_PATH_SDK_TOOLS, getBin());
         super.buildEnvVars(env);
     }
 

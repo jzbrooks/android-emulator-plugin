@@ -54,8 +54,8 @@ import hudson.util.ListBoxModel.Option;
 import jenkins.model.Jenkins;
 import jenkins.plugin.android.emulator.AndroidSDKConstants;
 import jenkins.plugin.android.emulator.Messages;
+import jenkins.plugin.android.emulator.sdk.cli.CLICommand;
 import jenkins.plugin.android.emulator.sdk.cli.SDKManagerCLIBuilder;
-import jenkins.plugin.android.emulator.sdk.cli.SDKManagerCLIBuilder.CLICommand;
 import net.sf.json.JSONObject;
 
 /**
@@ -173,7 +173,7 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
 
         String remoteSDKRoot = sdkRoot.getRemote();
 
-        CLICommand cmd = SDKManagerCLIBuilder.create(sdkmanager.getRemote(), log) //
+        CLICommand cmd = SDKManagerCLIBuilder.create(sdkmanager.getRemote()) //
                 .proxy(Jenkins.get().proxy) //
                 .sdkRoot(remoteSDKRoot) //
                 .channel(channel) //

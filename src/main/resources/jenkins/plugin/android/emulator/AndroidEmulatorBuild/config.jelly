@@ -33,7 +33,17 @@ THE SOFTWARE.
         </select>
     </f:entry>
 
+    <f:dropdownDescriptorSelector title="${%sdk.homeLocation}" field="homeLocationStrategy" />
+
     <f:entry title="${%osVersion.title}">
         <f:textbox field="osVersion" />
+    </f:entry>
+
+    <f:entry title="${%screenDensity.title}">
+        <f:combobox field="screenDensity" />
+    </f:entry>
+
+    <f:entry title="${%screenResolution.title}">
+        <f:combobox field="screenResolution" />
     </f:entry>
 </j:jelly>

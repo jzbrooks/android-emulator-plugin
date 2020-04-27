@@ -34,12 +34,14 @@ import org.kohsuke.stapler.StaplerRequest;
 
 import hudson.EnvVars;
 import hudson.Extension;
+import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.Computer;
 import hudson.model.EnvironmentSpecific;
 import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.plugins.android_emulator.Constants;
+import hudson.plugins.android_emulator.sdk.Tool;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.NodeSpecific;
 import hudson.tools.ToolDescriptor;
@@ -61,18 +63,20 @@ import net.sf.json.JSONObject;
 public class AndroidSDKInstallation extends ToolInstallation implements EnvironmentSpecific<AndroidSDKInstallation>, NodeSpecific<AndroidSDKInstallation> {
 
     private final class LookupExecuteCallable extends MasterToSlaveCallable<String, IOException> {
+
         private static final long serialVersionUID = -6703610106678288597L;
 
-        private final String command;
+        private final Tool tool;
 
-        public LookupExecuteCallable(String command) {
-            this.command = command;
+        public LookupExecuteCallable(Tool tool) {
+            this.tool = tool;
         }
 
         @Override
         public String call() throws IOException {
             Platform currentPlatform = getPlatform();
-            File cmd = new File(getBin(), command + currentPlatform.extension);
+            File toolHome = new File(getHome(), tool.toolLocator.findInSdk(false));
+            File cmd = new File(toolHome, tool.getExecutable(currentPlatform != Platform.WINDOWS));
             if (cmd.exists()) {
                 return cmd.getPath();
             }
@@ -80,7 +84,6 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
         }
     }
 
-    private final static String CMD_SDK_MANAGER = "sdkmanager";
     private Platform platform;
 
     @DataBoundConstructor
@@ -100,7 +103,7 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
     }
 
     /**
-     * Gets the executable path of NodeJS on the given target system.
+     * Gets the executable path of SDKManager on the given target system.
      *
      * @param launcher a way to start processes
      * @return the sdkmanager executable in the system is exists, {@code null}
@@ -109,13 +112,43 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
      * @throws IOException if something goes wrong
      */
     public String getSDKManager(final Launcher launcher) throws InterruptedException, IOException {
+        return getToolLocation(launcher, Tool.SDKMANAGER);
+    }
+
+    /**
+     * Gets the executable path of ADB on the given target system.
+     *
+     * @param launcher a way to start processes
+     * @return the adb executable in the system is exists, {@code null}
+     *         otherwise.
+     * @throws InterruptedException if the step is interrupted
+     * @throws IOException if something goes wrong
+     */
+    public String getADB(final Launcher launcher) throws InterruptedException, IOException {
+        return getToolLocation(launcher, Tool.ADB);
+    }
+
+    /**
+     * Gets the executable path of emulator on the given target system.
+     *
+     * @param launcher a way to start processes
+     * @return the emulator executable in the system is exists, {@code null}
+     *         otherwise.
+     * @throws InterruptedException if the step is interrupted
+     * @throws IOException if something goes wrong
+     */
+    public String getEmulator(Launcher launcher) throws InterruptedException, IOException {
+        return getToolLocation(launcher, Tool.EMULATOR);
+    }
+
+    private String getToolLocation(final Launcher launcher, Tool tool) throws IOException, InterruptedException {
         // DO NOT REMOVE this callable otherwise paths constructed by File
         // and similar API will be based on the master node O.S.
         final VirtualChannel channel = launcher.getChannel();
         if (channel == null) {
             throw new IOException("Unable to get a channel for the launcher");
         }
-        return channel.call(new LookupExecuteCallable(CMD_SDK_MANAGER));
+        return channel.call(new LookupExecuteCallable(tool));
     }
 
     @Override

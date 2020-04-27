@@ -1,3 +1,26 @@
+/*
+ * The MIT License
+ *
+ * Copyright (c) 2020, Nikolas Falco
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
 package jenkins.plugin.android.emulator.sdk.cli;
 
 import java.io.File;
@@ -14,30 +37,16 @@ import org.apache.commons.lang.StringUtils;
 import hudson.EnvVars;
 import hudson.ProxyConfiguration;
 import hudson.Util;
-import hudson.model.TaskListener;
 import hudson.util.ArgumentListBuilder;
 import hudson.util.Secret;
 import jenkins.plugin.android.emulator.tools.AndroidSDKInstaller.Channel;
 
+/**
+ * Build a command line argument for sdkmanager command.
+ * 
+ * @author Nikolas Falco
+ */
 public class SDKManagerCLIBuilder {
-
-    public static class CLICommand {
-        private final ArgumentListBuilder arguments;
-        private final EnvVars env;
-
-        private CLICommand(ArgumentListBuilder arguments, EnvVars env) {
-            this.arguments = arguments;
-            this.env = env;
-        }
-
-        public ArgumentListBuilder arguments() {
-            return arguments;
-        }
-
-        public EnvVars env() {
-            return env;
-        }
-    }
 
     private static final String NO_PREFIX = "";
     private static final String ARG_OBSOLETE = "--include_obsolete";
@@ -64,7 +73,7 @@ public class SDKManagerCLIBuilder {
         this.executable = executable;
     }
 
-    public static SDKManagerCLIBuilder create(@Nullable String executable, TaskListener log) {
+    public static SDKManagerCLIBuilder create(@Nullable String executable) {
         return new SDKManagerCLIBuilder(Util.fixEmptyAndTrim(executable));
     }
 
@@ -105,7 +114,7 @@ public class SDKManagerCLIBuilder {
      */
     public CLICommand install(Collection<String> packages) {
         if (packages == null || packages.isEmpty()) {
-            throw new IllegalArgumentException("At lease a packge must be specified");
+            throw new IllegalArgumentException("At least a packge must be specified");
         }
 
         ArgumentListBuilder arguments = new ArgumentListBuilder(executable);
@@ -159,7 +168,7 @@ public class SDKManagerCLIBuilder {
         if (userInfo != null && StringUtils.isNotBlank(proxy.getEncryptedPassword())) {
             Secret secret = Secret.decrypt(proxy.getEncryptedPassword());
             if (secret != null) {
-                userInfo = Util.fixEmptyAndTrim(secret.getPlainText());
+                userInfo += ":" + Util.fixEmptyAndTrim(secret.getPlainText());
             }
         }
 

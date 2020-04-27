@@ -1,0 +1,211 @@
+package jenkins.plugin.android.emulator.sdk.cli;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+
+import javax.annotation.CheckForNull;
+import javax.annotation.Nullable;
+
+import org.apache.commons.lang.StringUtils;
+
+import hudson.EnvVars;
+import hudson.ProxyConfiguration;
+import hudson.Util;
+import hudson.plugins.android_emulator.Constants;
+import hudson.util.ArgumentListBuilder;
+import hudson.util.Secret;
+
+/**
+ * Build a command line argument for emulator command.
+ * 
+ * @see https://developer.android.com/studio/run/emulator-commandline
+ * @author Nikolas Falco
+ */
+public class EmulatorCLIBuilder {
+    private static final String ARG_NO_BOOT_ANIM = "-no-boot-anim";
+    private static final String ARG_NO_ACCEL = "-no-accel";
+    private static final String ARG_WIPE_DATA = "-wipe-data";
+    private static final String ARG_MEMORY = "-memory";
+    private static final String ARG_CAMERA_BACK = "-camera-back";
+    private static final String ARG_CAMERA_FRONT = "-camera-front";
+    private static final String ARG_NO_SNAPSHOT = "-no-snapshot";
+    private static final String ARG_NO_SNAPSHOT_LOAD = "-no-snapshot-load";
+    private static final String ARG_NO_SNAPSHOT_SAVE = "-no-snapshot-save";
+    private static final String ARG_PORTS = "-port";
+    private static final String ARG_ACCEL = "-accel";
+    private static final String ARG_PROXY = "-http-proxy";
+
+    public enum SNAPSHOT {
+        NONE, PERSIST, NOT_PERSIST;
+    }
+
+    public enum CAMERA {
+        NONE, EMULATED;
+    }
+
+    public static EmulatorCLIBuilder create(@Nullable String executable) {
+        return new EmulatorCLIBuilder(Util.fixEmptyAndTrim(executable));
+    }
+
+    private String executable;
+    private String dataDir;
+    private SNAPSHOT mode = SNAPSHOT.NONE;
+    private CAMERA cameraBack = CAMERA.NONE;
+    private CAMERA cameraFront = CAMERA.NONE;
+    private int memory = -1;
+    private boolean wipe = true;
+    private ProxyConfiguration proxy;
+    private String avdName = Constants.SNAPSHOT_NAME;
+
+    private EmulatorCLIBuilder(@CheckForNull String executable) {
+        if (executable == null) {
+            throw new IllegalArgumentException("Invalid empty or null executable");
+        }
+        this.executable = executable;
+    }
+
+    public EmulatorCLIBuilder proxy(ProxyConfiguration proxy) {
+        this.proxy = proxy;
+        return this;
+    }
+
+    public EmulatorCLIBuilder dataDir(String dataDir) {
+        this.dataDir = dataDir;
+        return this;
+    }
+
+    public EmulatorCLIBuilder quickBoot(SNAPSHOT mode) {
+        this.mode = mode;
+        return this;
+    }
+
+    public EmulatorCLIBuilder cameraBack(CAMERA mode) {
+        this.cameraBack = mode;
+        return this;
+    }
+
+    public EmulatorCLIBuilder cameraFront(CAMERA mode) {
+        this.cameraFront = mode;
+        return this;
+    }
+
+    public EmulatorCLIBuilder memory(int memory) {
+        this.memory = memory;
+        return this;
+    }
+
+    public EmulatorCLIBuilder wipe(boolean wipe) {
+        this.wipe = wipe;
+        return this;
+    }
+
+    public EmulatorCLIBuilder avdName(String avdName) {
+        this.avdName = avdName;
+        return this;
+    }
+
+    public CLICommand build(int consolePort) {
+        return build(consolePort, consolePort + 1);
+    }
+
+    public CLICommand build(int consolePort, int adbPort) {
+        if (consolePort < 5554) {
+            throw new IllegalArgumentException("Emulator port must be greater or equals than 5554");
+        }
+        ArgumentListBuilder arguments = new ArgumentListBuilder(executable);
+
+        if (avdName == null) {
+            avdName = Constants.SNAPSHOT_NAME;
+        }
+        arguments.add("-avd", avdName);
+
+        if (dataDir != null) {
+            arguments.add("-datadir");
+            arguments.addQuoted(dataDir);
+        }
+
+        // Quick Boot params
+        switch (mode) {
+        case NOT_PERSIST:
+            arguments.add(ARG_NO_SNAPSHOT_SAVE);
+            break;
+        case PERSIST:
+            arguments.add(ARG_NO_SNAPSHOT_LOAD);
+            break;
+        case NONE:
+            arguments.add(ARG_NO_SNAPSHOT);
+            break;
+        default:
+        }
+
+        // Device Hardware params
+        switch (cameraFront) {
+        case EMULATED:
+            arguments.add(ARG_CAMERA_FRONT, "emulated");
+            break;
+        case NONE:
+            arguments.add(ARG_CAMERA_FRONT, "none");
+            break;
+        default:
+        }
+
+        switch (cameraBack) {
+        case EMULATED:
+            arguments.add(ARG_CAMERA_BACK, "emulated");
+            break;
+        case NONE:
+            arguments.add(ARG_CAMERA_BACK, "none");
+            break;
+        default:
+        }
+
+        // Disk Images and Memory params
+        if (memory != -1) {
+            arguments.add(ARG_MEMORY, String.valueOf(memory));
+        }
+
+        if (wipe) {
+            arguments.add(ARG_WIPE_DATA);
+        }
+
+        // Network params
+        arguments.add(ARG_PORTS, consolePort + "," + adbPort);
+
+        if (proxy != null) {
+            String userInfo = Util.fixEmptyAndTrim(proxy.getUserName());
+            // append password only if userName is defined
+            if (userInfo != null && StringUtils.isNotBlank(proxy.getEncryptedPassword())) {
+                Secret secret = Secret.decrypt(proxy.getEncryptedPassword());
+                if (secret != null) {
+                    userInfo += ":" + Util.fixEmptyAndTrim(secret.getPlainText());
+                }
+            }
+
+            arguments.add(ARG_PROXY);
+            try {
+                String proxyURL = new URI("http", userInfo, proxy.name, proxy.port, null, null, null).toString();
+                if (userInfo != null) {
+                    arguments.addMasked(proxyURL);
+                } else {
+                    arguments.add(proxyURL);
+                }
+            } catch (URISyntaxException e) {
+                if (userInfo != null) {
+                    arguments.addMasked(userInfo + "@" + proxy.name + ":" + proxy.port);
+                } else {
+                    arguments.add(proxy.name + ":" + proxy.port);
+                }
+            }
+        }
+
+        // System params
+        arguments.add(ARG_NO_ACCEL);
+        arguments.add(ARG_ACCEL, "off");
+
+        // UI params
+        arguments.add(ARG_NO_BOOT_ANIM);
+
+        return new CLICommand(arguments, new EnvVars());
+    }
+
+}

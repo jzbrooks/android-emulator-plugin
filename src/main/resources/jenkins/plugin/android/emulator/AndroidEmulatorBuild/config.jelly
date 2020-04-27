@@ -46,4 +46,8 @@ THE SOFTWARE.
     <f:entry title="${%screenResolution.title}">
         <f:combobox field="screenResolution" />
     </f:entry>
+
+    <f:entry title="${%avdName.title}">
+        <f:textbox field="avdName" />
+    </f:entry>
 </j:jelly>

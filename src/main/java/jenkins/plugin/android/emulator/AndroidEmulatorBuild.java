@@ -25,7 +25,6 @@ package jenkins.plugin.android.emulator;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.concurrent.TimeUnit;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -41,7 +40,6 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.Launcher.ProcStarter;
 import hudson.Util;
 import hudson.model.AbstractProject;
 import hudson.model.Computer;
@@ -54,11 +52,7 @@ import hudson.plugins.android_emulator.ScreenResolution;
 import hudson.tasks.BuildWrapperDescriptor;
 import hudson.util.ComboBoxModel;
 import hudson.util.FormValidation;
-import jenkins.model.Jenkins;
 import jenkins.plugin.android.emulator.EmulatorConfig.ValidationError;
-import jenkins.plugin.android.emulator.sdk.cli.ADBCLIBuilder;
-import jenkins.plugin.android.emulator.sdk.cli.CLICommand;
-import jenkins.plugin.android.emulator.sdk.cli.EmulatorCLIBuilder;
 import jenkins.plugin.android.emulator.sdk.home.DefaultHomeLocator;
 import jenkins.plugin.android.emulator.sdk.home.HomeLocator;
 import jenkins.plugin.android.emulator.tools.AndroidSDKInstallation;
@@ -92,6 +86,7 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
     private final String screenResolution;
     private final String emulatorTool;
     private HomeLocator homeLocationStrategy;
+    private String avdName;
 
     @DataBoundConstructor
     public AndroidEmulatorBuild(@CheckForNull String emulatorTool, String osVersion, String screenDensity, String screenResolution) {
@@ -116,6 +111,7 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
         config.setOSVersion(Util.replaceMacro(osVersion, env));
         config.setScreenDensity(Util.replaceMacro(screenDensity, env));
         config.setScreenResolution(Util.replaceMacro(screenResolution, env));
+        config.setAVDName(Util.replaceMacro(avdName, env));
 
         // validate input
         Collection<ValidationError> errors = config.validate();
@@ -133,10 +129,7 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
         }
         sdk = sdk.forNode(node, listener);
         sdk = sdk.forEnvironment(initialEnvironment);
-        String exec = sdk.getSDKManager(launcher);
-        if (exec == null) {
-            throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(sdk.getHome()));
-        }
+
         sdk.buildEnvVars(new EnvVarsAdapter(context));
 
         // configure home location
@@ -148,52 +141,27 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
 
         env = initialEnvironment.overrideAll(context.getEnv());
 
-        // FIXME move follow to external class
-        // start ADB service
-        CLICommand adbStart = ADBCLIBuilder.create(sdk.getADB(launcher)).start();
-        EnvVars adbEnv = new EnvVars(env);
-        adbEnv.putAll(adbStart.env());
-        ProcStarter adb = launcher.launch().envs(adbEnv) //
-                .stdout(listener) //
-                .pwd(sdk.getHome()) //
-                .cmds(adbStart.arguments());
-        int exitCode = adb.start().joinWithTimeout(5, TimeUnit.SECONDS, listener);
-        if (exitCode != 0) {
-            throw new IOException("adb failed. exit code: " + exitCode + ".");
-        }
+        EmulatorRunner emulatorRunner = new EmulatorRunner(config);
 
-        // write INI file
-        // create device
-        CLICommand avdStart = EmulatorCLIBuilder.create(sdk.getEmulator(launcher)) //
-                .dataDir(workspace.child(AndroidSDKConstants.ANDROID_CACHE).getRemote()) //
-                .proxy(Jenkins.get().proxy) //
-                .build(5554);
-        EnvVars avdEnv = new EnvVars(env);
-        avdEnv.putAll(avdStart.env());
-        ProcStarter avd = launcher.launch().envs(avdEnv) //
-                .stdout(listener) //
-                .pwd(sdk.getHome()) //
-                .cmds(avdStart.arguments());
-        exitCode = avd.join();
-        if (exitCode != 0) {
-            throw new IOException("avd failed. exit code: " + exitCode + ".");
+        String emulator = sdk.getEmulator(launcher);
+        if (emulator == null) {
+            throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(emulator));
         }
+        emulatorRunner.setEmulator(emulator);
 
-        // start emulator
-        CLICommand emuStart = EmulatorCLIBuilder.create(sdk.getEmulator(launcher)) //
-                .dataDir(workspace.child(AndroidSDKConstants.ANDROID_CACHE).getRemote()) //
-                .proxy(Jenkins.get().proxy) //
-                .build(5554);
-        EnvVars emuEnv = new EnvVars(env);
-        emuEnv.putAll(emuStart.env());
-        ProcStarter emu = launcher.launch().envs(emuEnv) //
-                .stdout(listener) //
-                .pwd(sdk.getHome()) //
-                .cmds(emuStart.arguments());
-        exitCode = emu.join();
-        if (exitCode != 0) {
-            throw new IOException("emulator failed. exit code: " + exitCode + ".");
+        String avdManager = sdk.getAVDManager(launcher);
+        if (avdManager == null) {
+            throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(avdManager));
         }
+        emulatorRunner.setAVDManager(avdManager);
+
+        String adb = sdk.getADB(launcher);
+        if (adb == null) {
+            throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(adb));
+        }
+        emulatorRunner.setADB(adb);
+
+        emulatorRunner.run(workspace, listener, env);
     }
 
     /**
@@ -239,6 +207,15 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
     @DataBoundSetter
     public void setHomeLocationStrategy(HomeLocator homeLocationStrategy) {
         this.homeLocationStrategy = homeLocationStrategy == null ? new DefaultHomeLocator() : homeLocationStrategy;
+    }
+
+    public String getAvdName() {
+        return avdName;
+    }
+
+    @DataBoundSetter
+    public void setAvdName(String avdName) {
+        this.avdName = avdName;
     }
 
     @Symbol("androidEmulator")

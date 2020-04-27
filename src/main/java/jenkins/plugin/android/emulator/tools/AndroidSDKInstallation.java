@@ -116,6 +116,19 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
     }
 
     /**
+     * Gets the executable path of AVDManager on the given target system.
+     *
+     * @param launcher a way to start processes
+     * @return the avdmanager executable in the system is exists, {@code null}
+     *         otherwise.
+     * @throws InterruptedException if the step is interrupted
+     * @throws IOException if something goes wrong
+     */
+    public String getAVDManager(final Launcher launcher) throws InterruptedException, IOException {
+        return getToolLocation(launcher, Tool.AVDMANAGER);
+    }
+
+    /**
      * Gets the executable path of ADB on the given target system.
      *
      * @param launcher a way to start processes

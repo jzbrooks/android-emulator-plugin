@@ -39,6 +39,10 @@ public class CLICommand {
         return arguments;
     }
 
+    public String getExecutable() {
+        return arguments.toList().get(0);
+    }
+
     public EnvVars env() {
         return env;
     }

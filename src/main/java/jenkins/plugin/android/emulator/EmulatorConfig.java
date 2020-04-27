@@ -46,6 +46,7 @@ public class EmulatorConfig {
     private String osVersion;
     private String screenDensity;
     private String screenResolution;
+    private String avdName;
 
     public String getOSVersion() {
         return osVersion;
@@ -69,6 +70,14 @@ public class EmulatorConfig {
 
     public void setScreenResolution(String screenResolution) {
         this.screenResolution = Util.fixEmptyAndTrim(screenResolution);
+    }
+
+    public String getAVDName() {
+        return avdName;
+    }
+
+    public void setAVDName(String avdName) {
+        this.avdName = Util.fixEmptyAndTrim(avdName);
     }
 
     public Collection<ValidationError> validate() {

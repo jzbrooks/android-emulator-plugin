@@ -37,12 +37,11 @@ import hudson.util.ArgumentListBuilder;
  */
 public class AVDManagerCLIBuilder {
 
-    private static final String NO_PREFIX = "";
     private static final String ARG_SILENT = "--silent";
     private static final String ARG_VERBOSE = "--verbose";
     private static final String ARG_CLEAR_CACHE = "--clear-cache";
-    private static final String ARG_CREATE = "create avd";
-    private static final String ARG_DELETE = "delete avd";
+    private static final String[] ARG_CREATE = new String[] { "create", "avd" };
+    private static final String[] ARG_DELETE = new String[] { "delete", "avd" };
     private static final String ARG_NAME = "--name";
     private static final String ARG_PACKAGE = "--package";
     private static final String ARG_FORCE = "--force";
@@ -89,7 +88,7 @@ public class AVDManagerCLIBuilder {
         return this;
     }
 
-    public AVDManagerCLIBuilder obsolete(boolean silent) {
+    public AVDManagerCLIBuilder silent(boolean silent) {
         this.silent = silent;
         return this;
     }

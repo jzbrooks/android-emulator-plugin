@@ -50,4 +50,29 @@ THE SOFTWARE.
     <f:entry title="${%avdName.title}">
         <f:textbox field="avdName" />
     </f:entry>
+
+    <f:entry title="${%deviceLocale.title}">
+        <f:combobox field="deviceLocale" />
+    </f:entry>
+
+    <f:entry title="${%deviceDefinition.title}">
+        <f:textbox field="deviceDefinition" />
+    </f:entry>
+
+    <f:entry title="${%sdCardSize.title}" description="${%sdCardSize.description}">
+        <f:textbox field="sdCardSize" />
+    </f:entry>
+
+    <f:entry title="${%targetABI.title}">
+        <f:textbox field="targetABI" />
+    </f:entry>
+
+    <f:entry title="${%hardwareProperties.title}" description="${%hardwareProperties.description}" field="hardwareProperties">
+        <f:repetableProperty field="hardwareProperties" add="${%Add custom hardware property...}">
+            <div align="right">
+                <f:repeatableDeleteButton />
+            </div>
+        </f:repetableProperty>
+    </f:entry>
+
 </j:jelly>

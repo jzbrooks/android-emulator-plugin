@@ -24,7 +24,12 @@
 package jenkins.plugin.android.emulator;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
+import java.util.Locale;
+import java.util.MissingResourceException;
+import java.util.stream.Collectors;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -85,8 +90,13 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
     private final String screenDensity;
     private final String screenResolution;
     private final String emulatorTool;
+    private String deviceLocale;
+    private String deviceDefinition;
+    private String sdCardSize;
+    private String targetABI;
     private HomeLocator homeLocationStrategy;
     private String avdName;
+    private List<HardwareProperty> hardwareProperties = new ArrayList<>();
 
     @DataBoundConstructor
     public AndroidEmulatorBuild(@CheckForNull String emulatorTool, String osVersion, String screenDensity, String screenResolution) {
@@ -99,24 +109,11 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
 
     @Override
     public void setUp(Context context, Run<?, ?> build, FilePath workspace, Launcher launcher, TaskListener listener, EnvVars initialEnvironment) throws IOException, InterruptedException {
+//        if (1 - 1 == 0) { return; }
         // get specific installation for the node
         AndroidSDKInstallation sdk = AndroidSDKUtil.getAndroidSDK(emulatorTool);
         if (sdk == null) {
             throw new AbortException(Messages.noInstallationFound(emulatorTool));
-        }
-
-        // replace variable in user input
-        EnvVars env = initialEnvironment.overrideAll(context.getEnv());
-        EmulatorConfig config = new EmulatorConfig();
-        config.setOSVersion(Util.replaceMacro(osVersion, env));
-        config.setScreenDensity(Util.replaceMacro(screenDensity, env));
-        config.setScreenResolution(Util.replaceMacro(screenResolution, env));
-        config.setAVDName(Util.replaceMacro(avdName, env));
-
-        // validate input
-        Collection<ValidationError> errors = config.validate();
-        if (!errors.isEmpty()) {
-            throw new AbortException(StringUtils.join(errors, "\n"));
         }
 
         Computer computer = workspace.toComputer();
@@ -139,7 +136,26 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
             context.env(AndroidSDKConstants.ENV_ANDROID_AVD_HOME, homeLocation.child("avd").getRemote());
         }
 
-        env = initialEnvironment.overrideAll(context.getEnv());
+        // replace variable in user input
+        final EnvVars env = initialEnvironment.overrideAll(context.getEnv());
+        EmulatorConfig config = new EmulatorConfig();
+        config.setOSVersion(Util.replaceMacro(osVersion, env));
+        config.setScreenDensity(Util.replaceMacro(screenDensity, env));
+        config.setScreenResolution(Util.replaceMacro(screenResolution, env));
+        config.setAVDName(Util.replaceMacro(avdName, env));
+        config.setLocale(Util.replaceMacro(deviceLocale, env));
+        config.setDefinition(Util.replaceMacro(deviceDefinition, env));
+        config.setCardSize(Util.replaceMacro(sdCardSize, env));
+        config.setTargetABI(Util.replaceMacro(targetABI, env));
+        config.setHardware(hardwareProperties.stream() //
+                .map(p -> new HardwareProperty(Util.replaceMacro(p.getKey(), env), Util.replaceMacro(p.getValue(), env))) //
+                .collect(Collectors.toList()));
+
+        // validate input
+        Collection<ValidationError> errors = config.validate();
+        if (!errors.isEmpty()) {
+            throw new AbortException(StringUtils.join(errors, "\n"));
+        }
 
         EmulatorRunner emulatorRunner = new EmulatorRunner(config);
 
@@ -218,6 +234,51 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
         this.avdName = avdName;
     }
 
+    public String getDeviceLocale() {
+        return deviceLocale;
+    }
+
+    @DataBoundSetter
+    public void setDeviceLocale(String deviceLocale) {
+        this.deviceLocale = deviceLocale;
+    }
+
+    public String getDeviceDefinition() {
+        return deviceDefinition;
+    }
+
+    @DataBoundSetter
+    public void setDeviceDefinition(String deviceDefinition) {
+        this.deviceDefinition = deviceDefinition;
+    }
+
+    public String getSdCardSize() {
+        return sdCardSize;
+    }
+
+    @DataBoundSetter
+    public void setSdCardSize(String sdCardSize) {
+        this.sdCardSize = sdCardSize;
+    }
+
+    public String getTargetABI() {
+        return targetABI;
+    }
+
+    @DataBoundSetter
+    public void setTargetABI(String targetABI) {
+        this.targetABI = targetABI;
+    }
+
+    public List<HardwareProperty> getHardwareProperties() {
+        return hardwareProperties;
+    }
+
+    @DataBoundSetter
+    public void setHardwareProperties(List<HardwareProperty> hardwareProperties) {
+        this.hardwareProperties = hardwareProperties;
+    }
+
     @Symbol("androidEmulator")
     @Extension
     public static final class DescriptorImpl extends BuildWrapperDescriptor {
@@ -263,7 +324,7 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
             }
             return values;
         }
-        
+
         public FormValidation doCheckScreenResolution(@QueryParameter @CheckForNull String screenResolution) {
             if (StringUtils.isBlank(screenResolution)) {
                 return FormValidation.error(Messages.required());
@@ -273,5 +334,58 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
             return FormValidation.ok();
         }
 
+        public FormValidation doCheckDeviceLocale(@QueryParameter @CheckForNull String deviceLocale) {
+            if (StringUtils.isBlank(deviceLocale)) {
+                return FormValidation.warning(Messages.AndroidEmulatorBuild_defaultLocale(Constants.DEFAULT_LOCALE));
+            }
+
+            try {
+                Locale locale = Locale.forLanguageTag(deviceLocale);
+                if (locale.getISO3Language() != null && locale.getISO3Country() != null) {
+                    return FormValidation.ok();
+                }
+            } catch (MissingResourceException e) {
+                return FormValidation.error(e, Messages.AndroidEmulatorBuild_wrongLocale());
+            }
+            return FormValidation.error(Messages.AndroidEmulatorBuild_wrongLocale());
+        }
+
+        public ComboBoxModel doFillDeviceLocaleItems() {
+            ComboBoxModel options = new ComboBoxModel();
+            for (Locale locale : Locale.getAvailableLocales()) {
+                options.add(locale.toLanguageTag());
+            }
+            return options;
+        }
+
+        public FormValidation doCheckSdCardSize(@QueryParameter @CheckForNull String sdCardSize) {
+            if (StringUtils.isBlank(sdCardSize)) {
+                return FormValidation.ok();
+            }
+
+            try {
+                int size = Integer.parseInt(sdCardSize);
+                if (size < 9) {
+                    return FormValidation.error(Messages.AndroidEmulatorBuild_sdCardTooSmall());
+                }
+            } catch (NumberFormatException e) {
+                // maybe it's a variable
+            }
+            return FormValidation.ok();
+        }
+
+        public FormValidation doCheckTargetAbi(@QueryParameter String targetABI) {
+            if (StringUtils.isBlank(targetABI)) {
+                return FormValidation.error(Messages.required());
+            }
+
+//            for (String s : Constants.TARGET_ABIS) {
+//                if (s.equals(value) || (value.contains("/") && value.endsWith(s))) {
+//                    return ValidationResult.ok();
+//                }
+//            }
+//            return ValidationResult.error(Messages.INVALID_TARGET_ABI());
+            return FormValidation.ok();
+        }
     }
 }

@@ -24,14 +24,20 @@
 package jenkins.plugin.android.emulator.sdk.cli;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.StringReader;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
+import java.util.StringTokenizer;
 import java.util.regex.Pattern;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 
 import hudson.EnvVars;
@@ -39,6 +45,8 @@ import hudson.ProxyConfiguration;
 import hudson.Util;
 import hudson.util.ArgumentListBuilder;
 import hudson.util.Secret;
+import jenkins.plugin.android.emulator.sdk.cli.CLICommand.OutputParser;
+import jenkins.plugin.android.emulator.sdk.cli.SDKPackages.SDKPackage;
 import jenkins.plugin.android.emulator.tools.AndroidSDKInstaller.Channel;
 
 /**
@@ -47,6 +55,9 @@ import jenkins.plugin.android.emulator.tools.AndroidSDKInstaller.Channel;
  * @author Nikolas Falco
  */
 public class SDKManagerCLIBuilder {
+    private enum Column {
+        NAME, VERSION, LOCATION, AVAILABLE, DESCRIPTION, UNSUPPORTED
+    }
 
     private static final String NO_PREFIX = "";
     private static final String ARG_OBSOLETE = "--include_obsolete";
@@ -54,6 +65,7 @@ public class SDKManagerCLIBuilder {
     private static final String ARG_CHANNEL = "--channel";
     private static final String ARG_SDK_ROOT = "--sdk_root";
     private static final String ARG_INSTALL = "--install";
+    private static final String ARG_LIST = "--list";
     private static final String ARG_PROXY_HOST = "--proxy_host";
     private static final String ARG_PROXY_PORT = "--proxy_port";
     private static final String ARG_PROXY_PROTOCOL = "--proxy";
@@ -112,11 +124,148 @@ public class SDKManagerCLIBuilder {
      * 
      * @return the command line to execute.
      */
-    public CLICommand install(Collection<String> packages) {
+    public CLICommand<Void> install(Collection<String> packages) {
         if (packages == null || packages.isEmpty()) {
             throw new IllegalArgumentException("At least a packge must be specified");
         }
 
+        ArgumentListBuilder arguments = buildCommonOptions();
+
+        arguments.add(ARG_INSTALL);
+        for (String p : packages) {
+            arguments.addQuoted(p);
+        }
+
+        EnvVars env = new EnvVars();
+        try {
+            buildProxyEnvVars(env);
+        } catch (URISyntaxException e) {
+            // fallback to CLI arguments
+            buildProxyArguments(arguments);
+        }
+
+        return new CLICommand<>(arguments, env);
+    }
+
+    public CLICommand<SDKPackages> list() {
+        ArgumentListBuilder arguments = buildCommonOptions();
+
+        arguments.add(ARG_LIST);
+
+        EnvVars env = new EnvVars();
+        try {
+            buildProxyEnvVars(env);
+        } catch (URISyntaxException e) {
+            // fallback to CLI arguments
+            buildProxyArguments(arguments);
+        }
+
+        OutputParser<SDKPackages> outputParser = new OutputParser<SDKPackages>() {
+            @Override
+            public SDKPackages parse(String input) throws IOException {
+                SDKPackages result = new SDKPackages();
+
+                List<Column> columns = null;
+                List<SDKPackage> bucket = null;
+                for (String line : IOUtils.readLines(new StringReader(input))) { // NOSONAR
+                    line = Util.fixEmptyAndTrim(line);
+                    if (StringUtils.isBlank(line)) {
+                        continue;
+                    }
+
+                    String lcLine = line.toLowerCase();
+                    if (StringUtils.isBlank(line)) {
+                        continue;
+                    } else if (lcLine.startsWith("available packages")) {
+                        bucket = result.getAvailable();
+                        continue;
+                    } else if (lcLine.startsWith("installed packages")) {
+                        bucket = result.getInstalled();
+                        continue;
+                    } else if (lcLine.startsWith("available updates")) {
+                        bucket = result.getUpdates();
+                        continue;
+                    } else if (bucket == null || lcLine.startsWith("--")) {
+                        continue;
+                    } else if (isHeader(lcLine)) {
+                        columns = createMapping(lcLine);
+                        continue;
+                    }
+
+                    // finally it's a table row
+                    SDKPackage sdkPackage = new SDKPackage();
+
+                    StringTokenizer st = new StringTokenizer(line, "|");
+                    for (Column column : columns) {
+                        if (!st.hasMoreTokens()) {
+                            // guard in case cells are empty
+                            continue;
+                        }
+
+                        String value = Util.fixEmptyAndTrim(st.nextToken());
+                        switch (column) {
+                        case NAME:
+                            sdkPackage.setName(value);
+                            break;
+                        case DESCRIPTION:
+                            sdkPackage.setDescription(value);
+                            break;
+                        case VERSION:
+                        case AVAILABLE:
+                            sdkPackage.setVersion(new Version(value));
+                            break;
+                        case LOCATION:
+                            sdkPackage.setDescription(value);
+                            break;
+                        case UNSUPPORTED:
+                            // skip
+                            break;
+                        }
+                    }
+
+                    bucket.add(sdkPackage);
+                }
+                return result;
+            }
+
+            private List<Column> createMapping(String headers) {
+                List<Column> columns = new ArrayList<>();
+                StringTokenizer st = new StringTokenizer(headers, "|");
+                while (st.hasMoreTokens()) {
+                    switch (st.nextToken().trim()) {
+                    case "path":
+                    case "id":
+                        columns.add(Column.NAME);
+                        break;
+                    case "version":
+                    case "installed":
+                        columns.add(Column.VERSION);
+                        break;
+                    case "description":
+                        columns.add(Column.DESCRIPTION);
+                        break;
+                    case "location":
+                        columns.add(Column.LOCATION);
+                        break;
+                    case "available":
+                        columns.add(Column.AVAILABLE);
+                        break;
+                    default:
+                        // unsupported
+                        break;
+                    }
+                }
+                return columns;
+            }
+
+            private boolean isHeader(String line) {
+                return line.startsWith("id") || line.startsWith("path");
+            }
+        };
+        return new CLICommand<>(arguments, env, outputParser);
+    }
+
+    private ArgumentListBuilder buildCommonOptions() {
         ArgumentListBuilder arguments = new ArgumentListBuilder(executable);
 
         arguments.addKeyValuePair(NO_PREFIX, ARG_SDK_ROOT, quote(sdkRoot), false);
@@ -132,22 +281,9 @@ public class SDKManagerCLIBuilder {
         if (obsolete) {
             arguments.add(ARG_OBSOLETE);
         }
-        arguments.add(ARG_FORCE_HTTP);
+        // arguments.add(ARG_FORCE_HTTP);
 
-        EnvVars env = new EnvVars();
-        try {
-            buildProxyEnvVars(env);
-        } catch (URISyntaxException e) {
-            // fallback to CLI arguments
-            buildProxyArguments(arguments);
-        }
-
-        arguments.add(ARG_INSTALL);
-        for (String p : packages) {
-            arguments.addQuoted(p);
-        }
-
-        return new CLICommand(arguments, env);
+        return arguments;
     }
 
     private void buildProxyEnvVars(EnvVars env) throws URISyntaxException {
@@ -206,4 +342,5 @@ public class SDKManagerCLIBuilder {
         }
         return quote;
     }
+
 }

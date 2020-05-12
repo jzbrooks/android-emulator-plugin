@@ -23,16 +23,29 @@
  */
 package jenkins.plugin.android.emulator.sdk.cli;
 
+import java.io.IOException;
+
 import hudson.EnvVars;
 import hudson.util.ArgumentListBuilder;
 
-public class CLICommand {
+public class CLICommand<R> {
+
+    public interface OutputParser<R> {
+        R parse(String input) throws IOException;
+    }
+
     private final ArgumentListBuilder arguments;
     private final EnvVars env;
+    private OutputParser<R> parser;
 
     CLICommand(ArgumentListBuilder arguments, EnvVars env) {
+        this(arguments, env, null);
+    }
+
+    CLICommand(ArgumentListBuilder arguments, EnvVars env, OutputParser<R> parser) {
         this.arguments = arguments;
         this.env = env;
+        this.parser = parser;
     }
 
     public ArgumentListBuilder arguments() {
@@ -45,5 +58,13 @@ public class CLICommand {
 
     public EnvVars env() {
         return env;
+    }
+
+    public R parse(String output) throws IOException {
+        if (parser == null) {
+            throw new IllegalStateException("This CLI does have an output parser");
+        }
+
+        return parser.parse(output);
     }
 }

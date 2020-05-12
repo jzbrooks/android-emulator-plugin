@@ -25,6 +25,10 @@ package jenkins.plugin.android.emulator;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
+import java.util.Locale;
+
+import org.apache.commons.lang.LocaleUtils;
 
 import hudson.Util;
 import hudson.plugins.android_emulator.ScreenDensity;
@@ -47,6 +51,11 @@ public class EmulatorConfig {
     private String screenDensity;
     private String screenResolution;
     private String avdName;
+    private String locale;
+    private String definition;
+    private String cardSize;
+    private String targetABI;
+    private List<HardwareProperty> hardwareProperties;
 
     public String getOSVersion() {
         return osVersion;
@@ -80,6 +89,46 @@ public class EmulatorConfig {
         this.avdName = Util.fixEmptyAndTrim(avdName);
     }
 
+    public String getLocale() {
+        return locale;
+    }
+
+    public void setLocale(String locale) {
+        this.locale = Util.fixEmptyAndTrim(locale);
+    }
+
+    public String getDefinition() {
+        return definition;
+    }
+
+    public void setDefinition(String deviceDefinition) {
+        this.definition = Util.fixEmptyAndTrim(deviceDefinition);
+    }
+
+    public String getCardSize() {
+        return cardSize;
+    }
+
+    public void setCardSize(String cardSize) {
+        this.cardSize = Util.fixEmptyAndTrim(cardSize);
+    }
+
+    public String getTargetABI() {
+        return targetABI;
+    }
+
+    public void setTargetABI(String targetABI) {
+        this.targetABI = Util.fixEmptyAndTrim(targetABI);
+    }
+
+    public List<HardwareProperty> getHardwareProperties() {
+        return hardwareProperties;
+    }
+    
+    public void setHardware(List<HardwareProperty> properties) {
+        this.hardwareProperties = properties == null ? new ArrayList<>() : properties;
+    }
+
     public Collection<ValidationError> validate() {
         Collection<ValidationError> errors = new ArrayList<>();
         if (osVersion == null) {
@@ -91,6 +140,29 @@ public class EmulatorConfig {
         if (ScreenResolution.valueOf(screenResolution) == null) {
             errors.add(new ValidationError("screen resolution '" + screenResolution + "' not valid"));
         }
+        if (targetABI == null) {
+            errors.add(new ValidationError("Target ABI is required"));
+        }
+        if (locale != null) {
+            try {
+                // parse locale with _ or -
+                if (Util.fixEmpty(Locale.forLanguageTag(locale).getLanguage()) != null || LocaleUtils.toLocale(locale) != null) {
+                    // it's ok
+                }
+            } catch (IllegalArgumentException e) {
+                errors.add(new ValidationError("Invalid locale format " + locale));
+            }
+        }
+        if (cardSize != null) {
+            try {
+                if (Integer.parseInt(cardSize) < 9) {
+                    errors.add(new ValidationError(Messages.AndroidEmulatorBuild_sdCardTooSmall()));
+                }
+            } catch (NumberFormatException e) {
+                errors.add(new ValidationError("Invalid SD card size " + cardSize));
+            }
+        }
         return errors;
     }
+
 }

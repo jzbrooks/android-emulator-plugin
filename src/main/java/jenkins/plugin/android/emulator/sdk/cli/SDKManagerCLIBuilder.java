@@ -25,7 +25,7 @@ package jenkins.plugin.android.emulator.sdk.cli;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.StringReader;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -35,12 +35,13 @@ import java.util.StringTokenizer;
 import java.util.regex.Pattern;
 
 import javax.annotation.CheckForNull;
-import javax.annotation.Nullable;
+import javax.annotation.Nonnull;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 
 import hudson.EnvVars;
+import hudson.FilePath;
 import hudson.ProxyConfiguration;
 import hudson.Util;
 import hudson.util.ArgumentListBuilder;
@@ -59,6 +60,113 @@ public class SDKManagerCLIBuilder {
         NAME, VERSION, LOCATION, AVAILABLE, DESCRIPTION, UNSUPPORTED
     }
 
+    static class ListPackagesParser implements OutputParser<SDKPackages> {
+        @Override
+        public SDKPackages parse(InputStream input) throws IOException {
+            SDKPackages result = new SDKPackages();
+
+            List<Column> columns = null;
+            List<SDKPackage> bucket = null;
+            for (String line : IOUtils.readLines(input, "UTF-8")) { // NOSONAR
+                line = Util.fixEmptyAndTrim(line);
+                if (StringUtils.isBlank(line)) {
+                    continue;
+                }
+
+                String lcLine = line.toLowerCase();
+                if (StringUtils.isBlank(line)) {
+                    continue;
+                } else if (lcLine.startsWith("available packages")) {
+                    bucket = result.getAvailable();
+                    continue;
+                } else if (lcLine.startsWith("installed packages")) {
+                    bucket = result.getInstalled();
+                    continue;
+                } else if (lcLine.startsWith("available updates")) {
+                    bucket = result.getUpdates();
+                    continue;
+                } else if (bucket == null || lcLine.startsWith("--")) {
+                    continue;
+                } else if (isHeader(lcLine)) {
+                    columns = createMapping(lcLine);
+                    continue;
+                }
+
+                // finally it's a table row
+                SDKPackage sdkPackage = new SDKPackage();
+
+                StringTokenizer st = new StringTokenizer(line, "|");
+                for (Column column : columns) { // NOSONAR
+                    if (!st.hasMoreTokens()) {
+                        // guard in case cells are empty
+                        continue;
+                    }
+
+                    String value = Util.fixEmptyAndTrim(st.nextToken());
+                    if (value == null) {
+                        continue;
+                    }
+
+                    switch (column) {
+                    case NAME:
+                        sdkPackage.setId(value);
+                        break;
+                    case DESCRIPTION:
+                        sdkPackage.setDescription(value);
+                        break;
+                    case VERSION:
+                    case AVAILABLE:
+                        sdkPackage.setVersion(new Version(value));
+                        break;
+                    case LOCATION:
+                        sdkPackage.setDescription(value);
+                        break;
+                    case UNSUPPORTED:
+                        // skip
+                        break;
+                    }
+                }
+
+                bucket.add(sdkPackage);
+            }
+            return result;
+        }
+
+        private List<Column> createMapping(String headers) {
+            List<Column> columns = new ArrayList<>();
+            StringTokenizer st = new StringTokenizer(headers, "|");
+            while (st.hasMoreTokens()) {
+                switch (st.nextToken().trim()) {
+                case "path":
+                case "id":
+                    columns.add(Column.NAME);
+                    break;
+                case "version":
+                case "installed":
+                    columns.add(Column.VERSION);
+                    break;
+                case "description":
+                    columns.add(Column.DESCRIPTION);
+                    break;
+                case "location":
+                    columns.add(Column.LOCATION);
+                    break;
+                case "available":
+                    columns.add(Column.AVAILABLE);
+                    break;
+                default:
+                    // unsupported
+                    break;
+                }
+            }
+            return columns;
+        }
+
+        private boolean isHeader(String line) {
+            return line.startsWith("id") || line.startsWith("path");
+        }
+    }
+
     private static final String NO_PREFIX = "";
     private static final String ARG_OBSOLETE = "--include_obsolete";
     private static final String ARG_VERBOSE = "--verbose";
@@ -69,24 +177,24 @@ public class SDKManagerCLIBuilder {
     private static final String ARG_PROXY_HOST = "--proxy_host";
     private static final String ARG_PROXY_PORT = "--proxy_port";
     private static final String ARG_PROXY_PROTOCOL = "--proxy";
-    private static final String ARG_FORCE_HTTP = "--no_https";
+//    private static final String ARG_FORCE_HTTP = "--no_https";
 
-    private final String executable;
+    private final FilePath executable;
     private ProxyConfiguration proxy;
     private String sdkRoot;
     private Channel channel;
     private boolean verbose;
     private boolean obsolete;
 
-    private SDKManagerCLIBuilder(@CheckForNull String executable) {
-        if (executable == null) {
+    private SDKManagerCLIBuilder(@CheckForNull FilePath sdkmanager) {
+        if (sdkmanager == null) {
             throw new IllegalArgumentException("Invalid empty or null executable");
         }
-        this.executable = executable;
+        this.executable = sdkmanager;
     }
 
-    public static SDKManagerCLIBuilder create(@Nullable String executable) {
-        return new SDKManagerCLIBuilder(Util.fixEmptyAndTrim(executable));
+    public static SDKManagerCLIBuilder create(@Nonnull FilePath sdkmanager) {
+        return new SDKManagerCLIBuilder(sdkmanager);
     }
 
     public SDKManagerCLIBuilder proxy(ProxyConfiguration proxy) {
@@ -144,7 +252,8 @@ public class SDKManagerCLIBuilder {
             buildProxyArguments(arguments);
         }
 
-        return new CLICommand<>(arguments, env);
+        return new CLICommand<Void>(executable, arguments, env) //
+                .withInput(StringUtils.repeat("y", "\r\n", packages.size()));
     }
 
     public CLICommand<SDKPackages> list() {
@@ -160,113 +269,11 @@ public class SDKManagerCLIBuilder {
             buildProxyArguments(arguments);
         }
 
-        OutputParser<SDKPackages> outputParser = new OutputParser<SDKPackages>() {
-            @Override
-            public SDKPackages parse(String input) throws IOException {
-                SDKPackages result = new SDKPackages();
-
-                List<Column> columns = null;
-                List<SDKPackage> bucket = null;
-                for (String line : IOUtils.readLines(new StringReader(input))) { // NOSONAR
-                    line = Util.fixEmptyAndTrim(line);
-                    if (StringUtils.isBlank(line)) {
-                        continue;
-                    }
-
-                    String lcLine = line.toLowerCase();
-                    if (StringUtils.isBlank(line)) {
-                        continue;
-                    } else if (lcLine.startsWith("available packages")) {
-                        bucket = result.getAvailable();
-                        continue;
-                    } else if (lcLine.startsWith("installed packages")) {
-                        bucket = result.getInstalled();
-                        continue;
-                    } else if (lcLine.startsWith("available updates")) {
-                        bucket = result.getUpdates();
-                        continue;
-                    } else if (bucket == null || lcLine.startsWith("--")) {
-                        continue;
-                    } else if (isHeader(lcLine)) {
-                        columns = createMapping(lcLine);
-                        continue;
-                    }
-
-                    // finally it's a table row
-                    SDKPackage sdkPackage = new SDKPackage();
-
-                    StringTokenizer st = new StringTokenizer(line, "|");
-                    for (Column column : columns) {
-                        if (!st.hasMoreTokens()) {
-                            // guard in case cells are empty
-                            continue;
-                        }
-
-                        String value = Util.fixEmptyAndTrim(st.nextToken());
-                        switch (column) {
-                        case NAME:
-                            sdkPackage.setName(value);
-                            break;
-                        case DESCRIPTION:
-                            sdkPackage.setDescription(value);
-                            break;
-                        case VERSION:
-                        case AVAILABLE:
-                            sdkPackage.setVersion(new Version(value));
-                            break;
-                        case LOCATION:
-                            sdkPackage.setDescription(value);
-                            break;
-                        case UNSUPPORTED:
-                            // skip
-                            break;
-                        }
-                    }
-
-                    bucket.add(sdkPackage);
-                }
-                return result;
-            }
-
-            private List<Column> createMapping(String headers) {
-                List<Column> columns = new ArrayList<>();
-                StringTokenizer st = new StringTokenizer(headers, "|");
-                while (st.hasMoreTokens()) {
-                    switch (st.nextToken().trim()) {
-                    case "path":
-                    case "id":
-                        columns.add(Column.NAME);
-                        break;
-                    case "version":
-                    case "installed":
-                        columns.add(Column.VERSION);
-                        break;
-                    case "description":
-                        columns.add(Column.DESCRIPTION);
-                        break;
-                    case "location":
-                        columns.add(Column.LOCATION);
-                        break;
-                    case "available":
-                        columns.add(Column.AVAILABLE);
-                        break;
-                    default:
-                        // unsupported
-                        break;
-                    }
-                }
-                return columns;
-            }
-
-            private boolean isHeader(String line) {
-                return line.startsWith("id") || line.startsWith("path");
-            }
-        };
-        return new CLICommand<>(arguments, env, outputParser);
+        return new CLICommand<SDKPackages>(executable, arguments, env).withParser(new ListPackagesParser());
     }
 
     private ArgumentListBuilder buildCommonOptions() {
-        ArgumentListBuilder arguments = new ArgumentListBuilder(executable);
+        ArgumentListBuilder arguments = new ArgumentListBuilder();
 
         arguments.addKeyValuePair(NO_PREFIX, ARG_SDK_ROOT, quote(sdkRoot), false);
 

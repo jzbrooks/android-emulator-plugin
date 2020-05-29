@@ -23,48 +23,124 @@
  */
 package jenkins.plugin.android.emulator.sdk.cli;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
+import org.apache.commons.io.input.NullInputStream;
+import org.apache.tools.ant.filters.StringInputStream;
 
 import hudson.EnvVars;
+import hudson.FilePath;
+import hudson.Launcher;
+import hudson.Launcher.ProcStarter;
+import hudson.model.TaskListener;
 import hudson.util.ArgumentListBuilder;
+import net.kemitix.wrapper.printstream.PrintStreamWrapper;
 
 public class CLICommand<R> {
 
     public interface OutputParser<R> {
-        R parse(String input) throws IOException;
+        R parse(InputStream input) throws IOException;
     }
 
+    private final FilePath command;
     private final ArgumentListBuilder arguments;
     private final EnvVars env;
+    private InputStream stdin = new NullInputStream(0);
+    private FilePath root;
     private OutputParser<R> parser;
 
-    CLICommand(ArgumentListBuilder arguments, EnvVars env) {
-        this(arguments, env, null);
-    }
-
-    CLICommand(ArgumentListBuilder arguments, EnvVars env, OutputParser<R> parser) {
+    CLICommand(FilePath command, ArgumentListBuilder arguments, EnvVars env) {
+        this.command = command;
         this.arguments = arguments;
         this.env = env;
-        this.parser = parser;
     }
 
     public ArgumentListBuilder arguments() {
         return arguments;
     }
 
-    public String getExecutable() {
-        return arguments.toList().get(0);
+    public CLICommand<R> withEnv(String key, String value) {
+        env.put(key, value);
+        return this;
     }
 
-    public EnvVars env() {
-        return env;
+    public R execute(Launcher launcher) throws IOException, InterruptedException {
+        return execute(launcher, null);
     }
 
-    public R parse(String output) throws IOException {
-        if (parser == null) {
-            throw new IllegalStateException("This CLI does have an output parser");
+    public R execute(@Nonnull Launcher launcher, @Nullable TaskListener output) throws IOException, InterruptedException {
+        List<String> args = getArguments();
+
+        // command.createLauncher(output)
+        ProcStarter starter = launcher.launch().envs(env) //
+                .stdin(stdin) //
+                .pwd(root) //
+                .cmds(args) //
+                .masks(getMasks(args.size()));
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        if (output != null) {
+            if (parser != null) {
+                // clone output to make content available to the parser
+                starter.stdout(new TaskListener() {
+                    @Override
+                    public PrintStream getLogger() {
+                        return PrintStreamWrapper.copy(output.getLogger(), new PrintStream(baos));
+                    }
+                });
+            } else {
+                starter.stdout(output);
+            }
+        } else if (parser != null) {
+            starter.stdout(baos);
         }
 
-        return parser.parse(output);
+        int exitCode = starter.join();
+        if (exitCode != 0) {
+            throw new IOException(arguments.toString() + " failed. exit code: " + exitCode + ".");
+        }
+
+        if (parser != null) {
+            return parser.parse(new ByteArrayInputStream(baos.toByteArray()));
+        }
+        return null;
     }
+
+    private boolean[] getMasks(final int size) {
+        boolean[] masks = new boolean[size];
+        masks[0] = false;
+        System.arraycopy(arguments.toMaskArray(), 0, masks, 1, size - 1);
+        return masks;
+    }
+
+    private List<String> getArguments() {
+        List<String> args = new ArrayList<>(arguments.toList());
+        args.add(0, command.getRemote());
+        return args;
+    }
+
+    CLICommand<R> withRoot(FilePath root) {
+        this.root = root;
+        return this;
+    }
+
+    CLICommand<R> withParser(OutputParser<R> parser) {
+        this.parser = parser;
+        return this;
+    }
+
+    CLICommand<R> withInput(String input) {
+        this.stdin = new StringInputStream(input);
+        return this;
+    }
+
 }

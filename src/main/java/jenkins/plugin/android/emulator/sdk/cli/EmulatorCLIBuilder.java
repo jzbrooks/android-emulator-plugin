@@ -9,6 +9,7 @@ import javax.annotation.Nullable;
 import org.apache.commons.lang.StringUtils;
 
 import hudson.EnvVars;
+import hudson.FilePath;
 import hudson.ProxyConfiguration;
 import hudson.Util;
 import hudson.plugins.android_emulator.Constants;
@@ -43,11 +44,11 @@ public class EmulatorCLIBuilder {
         NONE, EMULATED;
     }
 
-    public static EmulatorCLIBuilder create(@Nullable String executable) {
-        return new EmulatorCLIBuilder(Util.fixEmptyAndTrim(executable));
+    public static EmulatorCLIBuilder create(@Nullable FilePath executable) {
+        return new EmulatorCLIBuilder(executable);
     }
 
-    private String executable;
+    private FilePath executable;
     private String dataDir;
     private SNAPSHOT mode = SNAPSHOT.NONE;
     private CAMERA cameraBack = CAMERA.NONE;
@@ -57,7 +58,7 @@ public class EmulatorCLIBuilder {
     private ProxyConfiguration proxy;
     private String avdName = Constants.SNAPSHOT_NAME;
 
-    private EmulatorCLIBuilder(@CheckForNull String executable) {
+    private EmulatorCLIBuilder(@CheckForNull FilePath executable) {
         if (executable == null) {
             throw new IllegalArgumentException("Invalid empty or null executable");
         }
@@ -104,15 +105,15 @@ public class EmulatorCLIBuilder {
         return this;
     }
 
-    public CLICommand build(int consolePort) {
+    public CLICommand<Void> build(int consolePort) {
         return build(consolePort, consolePort + 1);
     }
 
-    public CLICommand build(int consolePort, int adbPort) {
+    public CLICommand<Void> build(int consolePort, int adbPort) {
         if (consolePort < 5554) {
             throw new IllegalArgumentException("Emulator port must be greater or equals than 5554");
         }
-        ArgumentListBuilder arguments = new ArgumentListBuilder(executable);
+        ArgumentListBuilder arguments = new ArgumentListBuilder();
 
         if (avdName == null) {
             avdName = Constants.SNAPSHOT_NAME;
@@ -205,7 +206,7 @@ public class EmulatorCLIBuilder {
         // UI params
         arguments.add(ARG_NO_BOOT_ANIM);
 
-        return new CLICommand(arguments, new EnvVars());
+        return new CLICommand<>(executable, arguments, new EnvVars());
     }
 
 }

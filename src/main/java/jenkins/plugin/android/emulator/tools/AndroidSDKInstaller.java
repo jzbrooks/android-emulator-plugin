@@ -23,27 +23,24 @@
  */
 package jenkins.plugin.android.emulator.tools;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringUtils;
-import org.apache.tools.ant.filters.StringInputStream;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.Launcher.ProcStarter;
 import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.plugins.android_emulator.Constants;
@@ -54,10 +51,8 @@ import hudson.util.ListBoxModel.Option;
 import jenkins.model.Jenkins;
 import jenkins.plugin.android.emulator.AndroidSDKConstants;
 import jenkins.plugin.android.emulator.Messages;
-import jenkins.plugin.android.emulator.sdk.cli.CLICommand;
 import jenkins.plugin.android.emulator.sdk.cli.SDKManagerCLIBuilder;
 import jenkins.plugin.android.emulator.sdk.cli.SDKPackages;
-import jenkins.plugin.android.emulator.sdk.cli.SDKPackages.SDKPackage;
 import net.sf.json.JSONObject;
 
 /**
@@ -118,7 +113,7 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
         }
     }
 
-    private static final List<String> DEFAULT_PACKAGES = Arrays.asList("platform-tools", "build-tools", "emulator", "extras;android;m2repository", "extras;google;m2repository");
+    private static final List<String> DEFAULT_PACKAGES = Arrays.asList("platform-tools", "build-tools;*", "emulator", "extras;android;m2repository", "extras;google;m2repository");
 
     private transient Platform platform;
     private final Channel channel;
@@ -160,13 +155,13 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
         if (!ddmsConfig.exists()) {
             String settings = "pingOptIn=false\n";
             settings += "pingId=0\n";
-            ddmsConfig.write(settings, "UTF-8");
+            ddmsConfig.write(settings, StandardCharsets.UTF_8.name());
         }
 
         // configure for no local repositories
         FilePath localRepoCfg = sdkHome.child(AndroidSDKConstants.LOCAL_REPO_CONFIG);
         if (!localRepoCfg.exists()) {
-            localRepoCfg.write("count=0", "UTF-8");
+            localRepoCfg.write("count=0", StandardCharsets.UTF_8.name());
         }
     }
 
@@ -175,61 +170,58 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
 
         String remoteSDKRoot = sdkRoot.getRemote();
 
-        CLICommand<SDKPackages> cmdList = SDKManagerCLIBuilder.create(sdkmanager.getRemote()) //
-                .obsolete(true) //
-                .proxy(Jenkins.get().proxy) //
-                .sdkRoot(remoteSDKRoot) //
-                .channel(channel) //
-                .list();
-
-        // prepare environment variables
-        EnvVars env = new EnvVars();
-        env.put(Constants.ENV_VAR_ANDROID_SDK_HOME, remoteSDKRoot);
-        env.putAll(cmdList.env());
-
+        // TODO cache available packages for a configurable amount of hours
         Launcher launcher = sdkmanager.createLauncher(log);
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ProcStarter starter = launcher.launch().envs(env) //
-                .stdout(output) //
-                .pwd(sdkRoot) //
-                .cmds(cmdList.arguments());
-        int exitCode = starter.join();
-        if (exitCode != 0) {
-            throw new IOException("sdkmanager failed. exit code: " + exitCode + ".");
-        }
-
-        // FIXME cache available packages for a configurable amount of hours
-        List<SDKPackage> availables = cmdList.parse(output.toString("UTF-8")).getAvailable();
-        List<String> components = new ArrayList<>();
-        // get component with the latest version available
-        DEFAULT_PACKAGES.forEach(defaultPackage -> components.add(availables.stream() //
-                .filter(p -> p.getName().startsWith(defaultPackage)) // filter by component
-                .filter(p -> channel != Channel.STABLE || p.getVersion().getQualifier() == null) // filter out beta versions for stable channel
-                .sorted(Collections.reverseOrder()) //
-                .findFirst().get().getName()));
-
-        CLICommand<Void> cmdInstall = SDKManagerCLIBuilder.create(sdkmanager.getRemote()) //
-                .obsolete(true) //
+        SDKPackages packages = SDKManagerCLIBuilder.create(sdkmanager) //
                 .proxy(Jenkins.get().proxy) //
                 .sdkRoot(remoteSDKRoot) //
                 .channel(channel) //
-                .install(components);
+                .list() //
+                .withEnv(Constants.ENV_VAR_ANDROID_SDK_HOME, remoteSDKRoot) //
+                .execute(launcher, log);
 
-        launcher = sdkmanager.createLauncher(log);
-        starter = launcher.launch().envs(env) //
-                .stdout(log) //
-                .stdin(new StringInputStream(StringUtils.repeat("y", "\r\n", DEFAULT_PACKAGES.size()))) //
-                .pwd(sdkRoot) //
-                .cmds(cmdInstall.arguments());
-        exitCode = starter.join();
-        if (exitCode != 0) {
-            throw new IOException("sdkmanager failed. exit code: " + exitCode + ".");
+        // remove installed components
+        List<String> defaultPackages = DEFAULT_PACKAGES.stream() //
+                .filter(defaultPackage -> packages.getInstalled().stream().noneMatch(i -> {
+                    if (defaultPackage.endsWith("*")) {
+                        String defPkg = defaultPackage.replace("*", "");
+                        return i.getId().startsWith(defPkg);
+                    }
+                    return defaultPackage.equals(i.getId());
+                })) //
+                .collect(Collectors.toList());
+
+        if (!defaultPackages.isEmpty()) {
+            // get component with the available latest version
+            List<String> components = new ArrayList<>();
+            defaultPackages.forEach(defaultPackage -> components.add(packages.getAvailable().stream() //
+                    // filter by component, the wildcards allow partial matching
+                    .filter(p -> {
+                        if (defaultPackage.endsWith("*")) {
+                            String defPkg = defaultPackage.replace("\\*", "");
+                            return p.getId().startsWith(defPkg);
+                        }
+                        return defaultPackage.equals(p.getId());
+                    })
+                    // remove release candidate versions for stable channel
+                    .filter(p -> channel != Channel.STABLE || p.getVersion().getQualifier() == null) //
+                    .sorted(Collections.reverseOrder()) // for wildcards we takes latest version
+                    .findFirst().get().getId()));
+    
+            SDKManagerCLIBuilder.create(sdkmanager) //
+                    .obsolete(true) //
+                    .proxy(Jenkins.get().proxy) //
+                    .sdkRoot(remoteSDKRoot) //
+                    .channel(channel) //
+                    .install(components) //
+                    .withEnv(Constants.ENV_VAR_ANDROID_SDK_HOME, remoteSDKRoot) //
+                    .execute(launcher);
         }
     }
 
     @Override
     protected FilePath findPullUpDirectory(FilePath root) throws IOException, InterruptedException {
-        // do not pullup, keep original structure
+        // do not pull up, keep original structure
         return null;
     }
 
@@ -257,7 +249,7 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
             // latest available here https://developer.android.com/studio/index.html#command-tools
             try (InputStream is = getClass().getResourceAsStream("/" + getId() + ".json")) {
                 if (is != null) {
-                    String data = IOUtils.toString(is);
+                    String data = IOUtils.toString(is, StandardCharsets.UTF_8);
                     JSONObject json = JSONObject.fromObject(data);
                     installables = Arrays.asList(((InstallableList) JSONObject.toBean(json, InstallableList.class)).list);
                 }

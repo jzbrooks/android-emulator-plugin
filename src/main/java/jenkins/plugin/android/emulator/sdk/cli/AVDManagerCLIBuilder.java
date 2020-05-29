@@ -27,7 +27,7 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
 import hudson.EnvVars;
-import hudson.Util;
+import hudson.FilePath;
 import hudson.util.ArgumentListBuilder;
 
 /**
@@ -49,7 +49,7 @@ public class AVDManagerCLIBuilder {
     private static final String ARG_ABI = "--abi";
     private static final String ARG_SDCARD = "--sdcard";
 
-    private final String executable;
+    private final FilePath executable;
     private boolean verbose;
     private boolean silent;
     private int sdcard = -1;
@@ -57,15 +57,15 @@ public class AVDManagerCLIBuilder {
     private String abi;
     private String device;
 
-    private AVDManagerCLIBuilder(@CheckForNull String executable) {
+    private AVDManagerCLIBuilder(@CheckForNull FilePath executable) {
         if (executable == null) {
             throw new IllegalArgumentException("Invalid empty or null executable");
         }
         this.executable = executable;
     }
 
-    public static AVDManagerCLIBuilder create(@Nullable String executable) {
-        return new AVDManagerCLIBuilder(Util.fixEmptyAndTrim(executable));
+    public static AVDManagerCLIBuilder create(@Nullable FilePath executable) {
+        return new AVDManagerCLIBuilder(executable);
     }
 
     public AVDManagerCLIBuilder abi(String abi) {
@@ -98,12 +98,12 @@ public class AVDManagerCLIBuilder {
      * 
      * @return the command line to execute.
      */
-    public CLICommand createAVD(String name) {
+    public CLICommand<Void> createAVD(String name) {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("Device name is required");
         }
 
-        ArgumentListBuilder arguments = new ArgumentListBuilder(executable);
+        ArgumentListBuilder arguments = new ArgumentListBuilder();
 
         addGlobalOptions(arguments);
 
@@ -127,7 +127,7 @@ public class AVDManagerCLIBuilder {
         }
         arguments.add(ARG_FORCE);
 
-        return new CLICommand(arguments, new EnvVars());
+        return new CLICommand<>(executable, arguments, new EnvVars());
     }
 
     private void addGlobalOptions(ArgumentListBuilder arguments) {
@@ -145,12 +145,12 @@ public class AVDManagerCLIBuilder {
      * 
      * @return the command line to execute.
      */
-    public CLICommand deleteAVD(String name) {
+    public CLICommand<Void> deleteAVD(String name) {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("Device name is required");
         }
 
-        ArgumentListBuilder arguments = new ArgumentListBuilder(executable);
+        ArgumentListBuilder arguments = new ArgumentListBuilder();
 
         addGlobalOptions(arguments);
 
@@ -160,7 +160,7 @@ public class AVDManagerCLIBuilder {
         // action options
         arguments.add(ARG_NAME, name);
 
-        return new CLICommand(arguments, new EnvVars());
+        return new CLICommand<>(executable, arguments, new EnvVars());
     }
 
 }

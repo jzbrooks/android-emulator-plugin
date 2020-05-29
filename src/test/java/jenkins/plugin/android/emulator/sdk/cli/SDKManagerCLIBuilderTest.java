@@ -2,7 +2,8 @@ package jenkins.plugin.android.emulator.sdk.cli;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.apache.commons.io.IOUtils;
+import java.io.InputStream;
+
 import org.junit.Test;
 
 import jenkins.plugin.android.emulator.sdk.cli.SDKPackages.SDKPackage;
@@ -11,12 +12,12 @@ public class SDKManagerCLIBuilderTest {
 
     @Test
     public void test_list_parse() throws Exception {
-        String output = IOUtils.toString(this.getClass().getResource("sdkmanager_list.out"));
-        CLICommand<SDKPackages> cmd = SDKManagerCLIBuilder.create("sdkmanager").list();
-        SDKPackages packages = cmd.parse(output);
-        assertThat(packages.getAvailable()).isNotEmpty().hasSize(236).allMatch(p -> p.getName() != null, "Name is null");
-        assertThat(packages.getInstalled()).isNotEmpty().hasSize(6).allMatch(p -> p.getName() != null, "Name is null");
-        assertThat(packages.getUpdates()).isNotEmpty().hasSize(1).allMatch(p -> p.getName() != null, "Name is null");
+        try (InputStream is = this.getClass().getResourceAsStream("sdkmanager_list.out")) {
+            SDKPackages packages = new SDKManagerCLIBuilder.ListPackagesParser().parse(is);
+            assertThat(packages.getAvailable()).isNotEmpty().hasSize(236).allMatch(p -> p.getName() != null, "Name is null");
+            assertThat(packages.getInstalled()).isNotEmpty().hasSize(6).allMatch(p -> p.getName() != null, "Name is null");
+            assertThat(packages.getUpdates()).isNotEmpty().hasSize(1).allMatch(p -> p.getName() != null, "Name is null");
+        }
     }
 
     @Test

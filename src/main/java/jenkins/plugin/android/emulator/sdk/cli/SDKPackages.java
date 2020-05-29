@@ -5,18 +5,18 @@ import java.util.List;
 
 public class SDKPackages {
     public static class SDKPackage implements Comparable<SDKPackage> {
-        private String name;
+        private String id;
         private Version version;
         private Version available;
         private String description;
         private String location;
 
-        public String getName() {
-            return name;
+        public String getId() {
+            return id;
         }
 
-        public void setName(String name) {
-            this.name = name;
+        public void setId(String id) {
+            this.id = id;
         }
 
         public Version getVersion() {
@@ -56,7 +56,7 @@ public class SDKPackages {
             if (o == null) {
                 return 1;
             }
-            int result = name.compareTo(o.getName());
+            int result = id.compareTo(o.getId());
             if (result == 0) {
                 result = version.compareTo(o.getVersion());
             }
@@ -65,7 +65,7 @@ public class SDKPackages {
 
         @Override
         public String toString() {
-            return name;
+            return id;
         }
     }
 

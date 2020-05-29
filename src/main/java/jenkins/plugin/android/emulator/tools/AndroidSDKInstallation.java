@@ -34,7 +34,6 @@ import org.kohsuke.stapler.StaplerRequest;
 
 import hudson.EnvVars;
 import hudson.Extension;
-import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.Computer;
 import hudson.model.EnvironmentSpecific;

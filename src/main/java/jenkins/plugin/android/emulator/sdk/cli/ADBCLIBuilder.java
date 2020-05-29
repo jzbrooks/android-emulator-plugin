@@ -27,7 +27,7 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
 import hudson.EnvVars;
-import hudson.Util;
+import hudson.FilePath;
 import hudson.util.ArgumentListBuilder;
 import jenkins.plugin.android.emulator.AndroidSDKConstants;
 
@@ -41,17 +41,17 @@ public class ADBCLIBuilder {
     private static final String ARG_START_SERVER = "start-server";
     private static final String ARG_KILL_SERVER = "kill-server";
 
-    public static ADBCLIBuilder create(@Nullable String executable) {
-        return new ADBCLIBuilder(Util.fixEmptyAndTrim(executable));
+    public static ADBCLIBuilder create(@Nullable FilePath executable) {
+        return new ADBCLIBuilder(executable);
     }
 
-    private String executable;
+    private FilePath executable;
     private String serial;
     private boolean trace = false;
     private int port = 5037;
     private int maxEmulator = 16;
 
-    private ADBCLIBuilder(@CheckForNull String executable) {
+    private ADBCLIBuilder(@CheckForNull FilePath executable) {
         if (executable == null) {
             throw new IllegalArgumentException("Invalid empty or null executable");
         }
@@ -81,11 +81,11 @@ public class ADBCLIBuilder {
         return this;
     }
 
-    public CLICommand start() {
+    public CLICommand<Void> start() {
         ArgumentListBuilder arguments = buildGlobalOptions();
         arguments.add(ARG_START_SERVER);
 
-        return new CLICommand(arguments, buildEnvVars());
+        return new CLICommand<>(executable, arguments, buildEnvVars());
     }
 
     private EnvVars buildEnvVars() {
@@ -97,15 +97,15 @@ public class ADBCLIBuilder {
         return env;
     }
 
-    public CLICommand stop() {
+    public CLICommand<Void> stop() {
         ArgumentListBuilder arguments = buildGlobalOptions();
         arguments.add(ARG_KILL_SERVER);
 
-        return new CLICommand(arguments, buildEnvVars());
+        return new CLICommand<>(executable, arguments, buildEnvVars());
     }
 
     private ArgumentListBuilder buildGlobalOptions() {
-        ArgumentListBuilder arguments = new ArgumentListBuilder(executable);
+        ArgumentListBuilder arguments = new ArgumentListBuilder();
 
         if (serial != null) {
             arguments.add("-s", serial);

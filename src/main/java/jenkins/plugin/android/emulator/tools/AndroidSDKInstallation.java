@@ -23,10 +23,11 @@
  */
 package jenkins.plugin.android.emulator.tools;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+
+import javax.annotation.Nonnull;
 
 import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -34,14 +35,11 @@ import org.kohsuke.stapler.StaplerRequest;
 
 import hudson.EnvVars;
 import hudson.Extension;
-import hudson.Launcher;
 import hudson.model.Computer;
 import hudson.model.EnvironmentSpecific;
 import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.plugins.android_emulator.Constants;
-import hudson.plugins.android_emulator.sdk.Tool;
-import hudson.remoting.VirtualChannel;
 import hudson.slaves.NodeSpecific;
 import hudson.tools.ToolDescriptor;
 import hudson.tools.ToolInstallation;
@@ -49,7 +47,6 @@ import hudson.tools.ToolInstaller;
 import hudson.tools.ToolProperty;
 import jenkins.plugin.android.emulator.Messages;
 import jenkins.plugin.android.emulator.tools.AndroidSDKInstaller.Channel;
-import jenkins.security.MasterToSlaveCallable;
 import net.sf.json.JSONObject;
 
 /**
@@ -60,29 +57,6 @@ import net.sf.json.JSONObject;
  */
 @SuppressWarnings("serial")
 public class AndroidSDKInstallation extends ToolInstallation implements EnvironmentSpecific<AndroidSDKInstallation>, NodeSpecific<AndroidSDKInstallation> {
-
-    private final class LookupExecuteCallable extends MasterToSlaveCallable<String, IOException> {
-
-        private static final long serialVersionUID = -6703610106678288597L;
-
-        private final Tool tool;
-
-        public LookupExecuteCallable(Tool tool) {
-            this.tool = tool;
-        }
-
-        @Override
-        public String call() throws IOException {
-            Platform currentPlatform = getPlatform();
-            File toolHome = new File(getHome(), tool.toolLocator.findInSdk(false));
-            File cmd = new File(toolHome, tool.getExecutable(currentPlatform != Platform.WINDOWS));
-            if (cmd.exists()) {
-                return cmd.getPath();
-            }
-            return null;
-        }
-    }
-
     private Platform platform;
 
     @DataBoundConstructor
@@ -102,65 +76,14 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
     }
 
     /**
-     * Gets the executable path of SDKManager on the given target system.
+     * Gets a locator for CLI executables installed by this tool.
      *
      * @param launcher a way to start processes
-     * @return the sdkmanager executable in the system is exists, {@code null}
-     *         otherwise.
-     * @throws InterruptedException if the step is interrupted
+     * @return a locator for CLI executables for this tool
      * @throws IOException if something goes wrong
      */
-    public String getSDKManager(final Launcher launcher) throws InterruptedException, IOException {
-        return getToolLocation(launcher, Tool.SDKMANAGER);
-    }
-
-    /**
-     * Gets the executable path of AVDManager on the given target system.
-     *
-     * @param launcher a way to start processes
-     * @return the avdmanager executable in the system is exists, {@code null}
-     *         otherwise.
-     * @throws InterruptedException if the step is interrupted
-     * @throws IOException if something goes wrong
-     */
-    public String getAVDManager(final Launcher launcher) throws InterruptedException, IOException {
-        return getToolLocation(launcher, Tool.AVDMANAGER);
-    }
-
-    /**
-     * Gets the executable path of ADB on the given target system.
-     *
-     * @param launcher a way to start processes
-     * @return the adb executable in the system is exists, {@code null}
-     *         otherwise.
-     * @throws InterruptedException if the step is interrupted
-     * @throws IOException if something goes wrong
-     */
-    public String getADB(final Launcher launcher) throws InterruptedException, IOException {
-        return getToolLocation(launcher, Tool.ADB);
-    }
-
-    /**
-     * Gets the executable path of emulator on the given target system.
-     *
-     * @param launcher a way to start processes
-     * @return the emulator executable in the system is exists, {@code null}
-     *         otherwise.
-     * @throws InterruptedException if the step is interrupted
-     * @throws IOException if something goes wrong
-     */
-    public String getEmulator(Launcher launcher) throws InterruptedException, IOException {
-        return getToolLocation(launcher, Tool.EMULATOR);
-    }
-
-    private String getToolLocation(final Launcher launcher, Tool tool) throws IOException, InterruptedException {
-        // DO NOT REMOVE this callable otherwise paths constructed by File
-        // and similar API will be based on the master node O.S.
-        final VirtualChannel channel = launcher.getChannel();
-        if (channel == null) {
-            throw new IOException("Unable to get a channel for the launcher");
-        }
-        return channel.call(new LookupExecuteCallable(tool));
+    public ToolLocator getToolLocator() throws IOException {
+        return new ToolLocator(getPlatform(), getHome());
     }
 
     @Override
@@ -202,6 +125,7 @@ public class AndroidSDKInstallation extends ToolInstallation implements Environm
         return bin;
     }
 
+    @Nonnull
     private Platform getPlatform() throws DetectionFailedException {
         Platform currentPlatform = platform;
 

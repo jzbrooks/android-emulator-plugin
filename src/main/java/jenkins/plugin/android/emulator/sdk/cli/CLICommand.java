@@ -27,6 +27,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +44,8 @@ import hudson.Launcher;
 import hudson.Launcher.ProcStarter;
 import hudson.model.TaskListener;
 import hudson.util.ArgumentListBuilder;
+import hudson.util.NullStream;
+import hudson.util.StreamTaskListener;
 import net.kemitix.wrapper.printstream.PrintStreamWrapper;
 
 public class CLICommand<R> {
@@ -73,15 +76,21 @@ public class CLICommand<R> {
         return this;
     }
 
-    public R execute(Launcher launcher) throws IOException, InterruptedException {
-        return execute(launcher, null);
+    public CLICommand<R> withEnv(EnvVars env) {
+        env.putAll(env);
+        return this;
     }
 
-    public R execute(@Nonnull Launcher launcher, @Nullable TaskListener output) throws IOException, InterruptedException {
+    public R execute() throws IOException, InterruptedException {
+        return execute(new StreamTaskListener(new NullStream()));
+    }
+
+    public R execute(@Nonnull TaskListener output) throws IOException, InterruptedException {
         List<String> args = getArguments();
 
         // command.createLauncher(output)
-        ProcStarter starter = launcher.launch().envs(env) //
+        ProcStarter starter = command.createLauncher(output).launch() //
+                .envs(env) //
                 .stdin(stdin) //
                 .pwd(root) //
                 .cmds(args) //
@@ -91,12 +100,7 @@ public class CLICommand<R> {
         if (output != null) {
             if (parser != null) {
                 // clone output to make content available to the parser
-                starter.stdout(new TaskListener() {
-                    @Override
-                    public PrintStream getLogger() {
-                        return PrintStreamWrapper.copy(output.getLogger(), new PrintStream(baos));
-                    }
-                });
+                starter.stdout(new StreamTaskListener((OutputStream) PrintStreamWrapper.copy(output.getLogger(), new PrintStream(baos))));
             } else {
                 starter.stdout(output);
             }

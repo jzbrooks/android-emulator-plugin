@@ -23,12 +23,23 @@
  */
 package jenkins.plugin.android.emulator.sdk.cli;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.StringUtils;
+
 import hudson.EnvVars;
 import hudson.FilePath;
+import hudson.Util;
 import hudson.util.ArgumentListBuilder;
+import jenkins.plugin.android.emulator.sdk.cli.CLICommand.OutputParser;
+import jenkins.plugin.android.emulator.sdk.cli.Targets.TargetType;
 
 /**
  * Build a command line argument for avdmanager command.
@@ -37,9 +48,72 @@ import hudson.util.ArgumentListBuilder;
  */
 public class AVDManagerCLIBuilder {
 
+    static class ListTargetParser implements OutputParser<List<Targets>> {
+
+        @Override
+        public List<Targets> parse(InputStream input) throws IOException {
+            List<Targets> targets = new ArrayList<>();
+
+            Targets target = null;
+            for (String line : IOUtils.readLines(input, "UTF-8")) { // NOSONAR
+                line = Util.fixEmptyAndTrim(line);
+                if (StringUtils.isBlank(line)) {
+                    continue;
+                }
+
+                String lcLine = line.toLowerCase();
+                if (isHeader(lcLine) || lcLine.startsWith("available android targets")) {
+                    continue;
+                }
+
+                String key = lcLine.split(":")[0];
+                String value = Util.fixEmptyAndTrim(line.split(":")[1]);
+                if (value != null) {
+                    switch (key) {
+                    case "id":
+                        target = new Targets();
+                        targets.add(target);
+                        int idx = value.indexOf('"');
+                        target.setId(value.substring(idx + 1, value.lastIndexOf('"')));
+                        break;
+                    case "name":
+                        if (target != null) {
+                            target.setName(value);
+                        }
+                        break;
+                    case "type":
+                        if (target != null) {
+                            target.setType(TargetType.valueOf(value.toLowerCase()));
+                        }
+                        break;
+                    case "api level":
+                        if (target != null) {
+                            target.setAPILevel(Integer.parseInt(value));
+                        }
+                        break;
+                    case "revision":
+                        if (target != null) {
+                            target.setRevision(Integer.parseInt(value));
+                        }
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
+            return targets;
+        }
+
+        private boolean isHeader(String lcLine) {
+            return lcLine.startsWith("-");
+        }
+
+    }
+
     private static final String ARG_SILENT = "--silent";
     private static final String ARG_VERBOSE = "--verbose";
     private static final String ARG_CLEAR_CACHE = "--clear-cache";
+    private static final String[] ARG_LIST_TARGET = new String[] { "list", "target" };
     private static final String[] ARG_CREATE = new String[] { "create", "avd" };
     private static final String[] ARG_DELETE = new String[] { "delete", "avd" };
     private static final String ARG_NAME = "--name";
@@ -98,7 +172,7 @@ public class AVDManagerCLIBuilder {
      * 
      * @return the command line to execute.
      */
-    public CLICommand<Void> createAVD(String name) {
+    public CLICommand<Void> create(String name) {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("Device name is required");
         }
@@ -128,6 +202,18 @@ public class AVDManagerCLIBuilder {
         arguments.add(ARG_FORCE);
 
         return new CLICommand<>(executable, arguments, new EnvVars());
+    }
+
+    public CLICommand<List<Targets>> listTargets() {
+        ArgumentListBuilder arguments = new ArgumentListBuilder();
+
+        addGlobalOptions(arguments);
+
+        // action
+        arguments.add(ARG_LIST_TARGET);
+
+        return new CLICommand<List<Targets>>(executable, arguments, new EnvVars()) //
+                .withParser(new ListTargetParser());
     }
 
     private void addGlobalOptions(ArgumentListBuilder arguments) {

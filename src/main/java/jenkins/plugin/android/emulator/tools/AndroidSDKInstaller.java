@@ -115,7 +115,7 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
 
     private static final List<String> DEFAULT_PACKAGES = Arrays.asList("platform-tools", "build-tools;*", "emulator", "extras;android;m2repository", "extras;google;m2repository");
 
-    private transient Platform platform;
+    private Platform platform;
     private final Channel channel;
 
     @DataBoundConstructor
@@ -171,14 +171,13 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
         String remoteSDKRoot = sdkRoot.getRemote();
 
         // TODO cache available packages for a configurable amount of hours
-        Launcher launcher = sdkmanager.createLauncher(log);
         SDKPackages packages = SDKManagerCLIBuilder.create(sdkmanager) //
                 .proxy(Jenkins.get().proxy) //
                 .sdkRoot(remoteSDKRoot) //
                 .channel(channel) //
                 .list() //
                 .withEnv(Constants.ENV_VAR_ANDROID_SDK_HOME, remoteSDKRoot) //
-                .execute(launcher, log);
+                .execute();
 
         // remove installed components
         List<String> defaultPackages = DEFAULT_PACKAGES.stream() //
@@ -215,7 +214,7 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
                     .channel(channel) //
                     .install(components) //
                     .withEnv(Constants.ENV_VAR_ANDROID_SDK_HOME, remoteSDKRoot) //
-                    .execute(launcher);
+                    .execute();
         }
     }
 

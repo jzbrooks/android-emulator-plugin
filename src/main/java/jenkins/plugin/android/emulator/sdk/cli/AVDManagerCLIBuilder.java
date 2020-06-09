@@ -54,6 +54,8 @@ public class AVDManagerCLIBuilder {
         public List<Targets> parse(InputStream input) throws IOException {
             List<Targets> targets = new ArrayList<>();
 
+            boolean context = false; // indicates when the useful text starting
+                                     // for parsing
             Targets target = null;
             for (String line : IOUtils.readLines(input, "UTF-8")) { // NOSONAR
                 line = Util.fixEmptyAndTrim(line);
@@ -62,7 +64,8 @@ public class AVDManagerCLIBuilder {
                 }
 
                 String lcLine = line.toLowerCase();
-                if (isHeader(lcLine) || lcLine.startsWith("available android targets")) {
+                if (!context || isHeader(lcLine)) {
+                    context |= lcLine.startsWith("available android targets");
                     continue;
                 }
 
@@ -105,7 +108,7 @@ public class AVDManagerCLIBuilder {
         }
 
         private boolean isHeader(String lcLine) {
-            return lcLine.startsWith("-");
+            return lcLine.startsWith("-") || lcLine.contains("loading local repository");
         }
 
     }
@@ -119,7 +122,7 @@ public class AVDManagerCLIBuilder {
     private static final String ARG_NAME = "--name";
     private static final String ARG_PACKAGE = "--package";
     private static final String ARG_FORCE = "--force";
-    private static final String ARG_DEVICE = "--force";
+    private static final String ARG_DEVICE = "--device";
     private static final String ARG_ABI = "--abi";
     private static final String ARG_SDCARD = "--sdcard";
 
@@ -201,7 +204,12 @@ public class AVDManagerCLIBuilder {
         }
         arguments.add(ARG_FORCE);
 
-        return new CLICommand<>(executable, arguments, new EnvVars());
+        return new CLICommand<Void>(executable, arguments, new EnvVars()) //
+                // fix a bug in script or come where to get the SDK root raise
+                // up two parent instead of one
+                .withEnv("AVDMANAGER_OPTS", "-Dcom.android.sdkmanager.toolsdir=" + executable.getParent().getRemote()) //
+                // FIXME hardware profiles??
+                .withInput("\r\n");
     }
 
     public CLICommand<List<Targets>> listTargets() {

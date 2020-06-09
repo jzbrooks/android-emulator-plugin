@@ -32,7 +32,6 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.apache.commons.io.input.NullInputStream;
@@ -40,7 +39,6 @@ import org.apache.tools.ant.filters.StringInputStream;
 
 import hudson.EnvVars;
 import hudson.FilePath;
-import hudson.Launcher;
 import hudson.Launcher.ProcStarter;
 import hudson.model.TaskListener;
 import hudson.util.ArgumentListBuilder;
@@ -77,7 +75,7 @@ public class CLICommand<R> {
     }
 
     public CLICommand<R> withEnv(EnvVars env) {
-        env.putAll(env);
+        this.env.putAll(env);
         return this;
     }
 
@@ -85,14 +83,14 @@ public class CLICommand<R> {
         return execute(new StreamTaskListener(new NullStream()));
     }
 
-    public R execute(@Nonnull TaskListener output) throws IOException, InterruptedException {
+    public R execute(@Nullable TaskListener output) throws IOException, InterruptedException {
         List<String> args = getArguments();
 
         // command.createLauncher(output)
         ProcStarter starter = command.createLauncher(output).launch() //
                 .envs(env) //
                 .stdin(stdin) //
-                .pwd(root) //
+                .pwd(root == null ? command.getParent() : root) //
                 .cmds(args) //
                 .masks(getMasks(args.size()));
 
@@ -110,7 +108,7 @@ public class CLICommand<R> {
 
         int exitCode = starter.join();
         if (exitCode != 0) {
-            throw new IOException(arguments.toString() + " failed. exit code: " + exitCode + ".");
+            throw new IOException(command.getBaseName() + " " + arguments.toString() + " failed. exit code: " + exitCode + ".");
         }
 
         if (parser != null) {

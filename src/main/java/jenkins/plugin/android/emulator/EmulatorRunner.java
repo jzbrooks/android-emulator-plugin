@@ -25,20 +25,32 @@ package jenkins.plugin.android.emulator;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang.StringUtils;
 import org.ini4j.Ini;
 
+import hudson.AbortException;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.ProxyConfiguration;
 import hudson.model.TaskListener;
+import hudson.plugins.android_emulator.Constants;
+import jenkins.model.Jenkins;
+import jenkins.plugin.android.emulator.sdk.cli.ADBCLIBuilder;
 import jenkins.plugin.android.emulator.sdk.cli.AVDManagerCLIBuilder;
+import jenkins.plugin.android.emulator.sdk.cli.EmulatorCLIBuilder;
+import jenkins.plugin.android.emulator.sdk.cli.SDKManagerCLIBuilder;
+import jenkins.plugin.android.emulator.sdk.cli.SDKPackages;
 import jenkins.plugin.android.emulator.sdk.cli.Targets;
+import jenkins.plugin.android.emulator.tools.AndroidSDKInstaller.Channel;
 import jenkins.plugin.android.emulator.tools.ToolLocator;
 
 public class EmulatorRunner {
@@ -59,7 +71,27 @@ public class EmulatorRunner {
             env = new EnvVars();
         }
 
+        ProxyConfiguration proxy = Jenkins.get().proxy;
+
+        FilePath avdManager = locator.getAVDManager(launcher);
+        if (avdManager == null) {
+            throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(avdManager));
+        }
+        FilePath sdkManager = locator.getSDKManager(launcher);
+        if (sdkManager == null) {
+            throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(sdkManager));
+        }
+        FilePath adb = locator.getADB(launcher);
+        if (adb == null) {
+            throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(adb));
+        }
+        FilePath emulator = locator.getEmulator(launcher);
+        if (emulator == null) {
+            throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(emulator));
+        }
+
         String avdHome = env.get(AndroidSDKConstants.ENV_ANDROID_AVD_HOME);
+        String sdkRoot = env.get(Constants.ENV_VAR_ANDROID_SDK_ROOT); // FIXME required!
 
         // write INI file
         File advConfig = new File(avdHome, config.getAVDName() + ".ini");
@@ -70,32 +102,72 @@ public class EmulatorRunner {
         ini.store();
 
         // check if virtual device already exists
-        List<Targets> targets = AVDManagerCLIBuilder.create(locator.getAVDManager(launcher)) //
+        List<Targets> targets = AVDManagerCLIBuilder.create(avdManager) //
                 .silent(true) //
                 .listTargets() //
                 .withEnv(env) //
                 .execute();
 
         // gather required components
-        
+        Set<String> components = getComponents();
+
         // remove installed components
-        
-//        // start ADB service
-//        CLICommand cmd = ADBCLIBuilder.create(adb).start();
-//        executeWithTimeout(cmd, launcher, listener, env, 5l);
-//
+        SDKPackages packages = SDKManagerCLIBuilder.create(sdkManager) //
+            .channel(Channel.STABLE) // FIXME get that one configured in the installation tool
+            .sdkRoot(sdkRoot) //
+            .proxy(proxy) //
+            .list() //
+            .withEnv(env) //
+            .execute();
+        packages.getInstalled().forEach(p -> components.remove(p.getId()));
+
+        if (!components.isEmpty()) {
+            SDKManagerCLIBuilder.create(sdkManager) //
+                    .channel(Channel.STABLE) // FIXME get that one configured in the installation tool
+                    .sdkRoot(sdkRoot) //
+                    .proxy(proxy) //
+                    .install(components) //
+                    .withEnv(env) //
+                    .execute(listener);
+        }
+
+         // start ADB service
+        ADBCLIBuilder.create(adb) //
+                .maxEmulators(1) // FIXME set equals to the number of node executors
+                .start() //
+                .withEnv(env) //
+                .execute(listener);
+
         // create device
-//        cmd = AVDManagerCLIBuilder.create(avdManager) //
-//                .silent(true) //
-//                .create(config.getAVDName());
-//        execute(cmd, launcher, listener, env);
-//
-//        // start emulator
-//        cmd = EmulatorCLIBuilder.create(emulator) //
-//                .dataDir(avdHome) //
-//                .proxy(Jenkins.get().proxy) //
-//                .build(5554);
-//        execute(cmd, launcher, listener, env);
+        AVDManagerCLIBuilder.create(avdManager) //
+                .silent(true) //
+                .packagePath(getSystemComponent()) //
+                .create(config.getAVDName()) //
+                .withEnv(env) //
+                .execute();
+
+        // start emulator
+        EmulatorCLIBuilder.create(emulator) //
+                .dataDir(avdHome) //
+                .proxy(proxy) //
+                .build(5554) // FIXME calculate the free using the executor number, in case of multiple emulator for this executor than store into a map <Node, port> pay attention on Node that could not be saved into an aware map.
+                .withEnv(env) //
+                .execute(listener);
+    }
+
+    private Set<String> getComponents() {
+        Set<String> components = new LinkedHashSet<>();
+        components.add(buildComponent("platforms", config.getOSVersion()));
+        components.add(getSystemComponent());
+        return components;
+    }
+
+    private String getSystemComponent() {
+        return buildComponent("system-images", config.getOSVersion(), "default", config.getTargetABI());
+    }
+
+    private String buildComponent(String...parts) {
+        return StringUtils.join(parts, ';');
     }
 
 }

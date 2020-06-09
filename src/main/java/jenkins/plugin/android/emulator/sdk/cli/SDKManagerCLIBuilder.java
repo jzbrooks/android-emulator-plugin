@@ -269,12 +269,17 @@ public class SDKManagerCLIBuilder {
             buildProxyArguments(arguments);
         }
 
-        return new CLICommand<SDKPackages>(executable, arguments, env).withParser(new ListPackagesParser());
+        return new CLICommand<SDKPackages>(executable, arguments, env) //
+                .withParser(new ListPackagesParser());
     }
 
     private ArgumentListBuilder buildCommonOptions() {
         ArgumentListBuilder arguments = new ArgumentListBuilder();
 
+        if (sdkRoot == null) {
+            sdkRoot = executable.getParent().getParent().getParent().getRemote();
+        }
+        // required
         arguments.addKeyValuePair(NO_PREFIX, ARG_SDK_ROOT, quote(sdkRoot), false);
 
         if (channel != null) {

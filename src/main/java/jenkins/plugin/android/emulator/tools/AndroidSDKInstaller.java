@@ -40,7 +40,6 @@ import org.kohsuke.stapler.QueryParameter;
 
 import hudson.Extension;
 import hudson.FilePath;
-import hudson.Launcher;
 import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.plugins.android_emulator.Constants;

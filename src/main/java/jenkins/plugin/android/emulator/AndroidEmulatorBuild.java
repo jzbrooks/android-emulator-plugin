@@ -58,7 +58,6 @@ import hudson.tasks.BuildWrapperDescriptor;
 import hudson.util.ComboBoxModel;
 import hudson.util.FormValidation;
 import jenkins.plugin.android.emulator.EmulatorConfig.ValidationError;
-import jenkins.plugin.android.emulator.EmulatorRunner.EmulatorRunnerBuilder;
 import jenkins.plugin.android.emulator.sdk.home.DefaultHomeLocator;
 import jenkins.plugin.android.emulator.sdk.home.HomeLocator;
 import jenkins.plugin.android.emulator.tools.AndroidSDKInstallation;
@@ -158,26 +157,7 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
             throw new AbortException(StringUtils.join(errors, "\n"));
         }
 
-        EmulatorRunner emulatorRunner = EmulatorRunnerBuilder.using(sdk.getToolLocator()).build(config);
-
-        FilePath emulator = sdk.getEmulator(launcher);
-        if (emulator == null) {
-            throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(emulator));
-        }
-        emulatorRunner.setEmulator(emulator);
-
-        FilePath avdManager = sdk.getAVDManager(launcher);
-        if (avdManager == null) {
-            throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(avdManager));
-        }
-        emulatorRunner.setAVDManager(avdManager);
-
-        FilePath adb = sdk.getADB(launcher);
-        if (adb == null) {
-            throw new AbortException(jenkins.plugin.android.emulator.Messages.noExecutableFound(adb));
-        }
-        emulatorRunner.setADB(adb);
-
+        EmulatorRunner emulatorRunner = new EmulatorRunner(config, sdk.getToolLocator());
         emulatorRunner.run(workspace, listener, env);
     }
 

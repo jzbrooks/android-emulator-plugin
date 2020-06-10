@@ -2,6 +2,7 @@ package jenkins.plugin.android.emulator.sdk.cli;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Locale;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
@@ -26,15 +27,17 @@ public class EmulatorCLIBuilder {
     private static final String ARG_NO_BOOT_ANIM = "-no-boot-anim";
     private static final String ARG_NO_ACCEL = "-no-accel";
     private static final String ARG_WIPE_DATA = "-wipe-data";
+    private static final String ARG_PROP = "-prop";
     private static final String ARG_MEMORY = "-memory";
     private static final String ARG_CAMERA_BACK = "-camera-back";
     private static final String ARG_CAMERA_FRONT = "-camera-front";
     private static final String ARG_NO_SNAPSHOT = "-no-snapshot";
     private static final String ARG_NO_SNAPSHOT_LOAD = "-no-snapshot-load";
     private static final String ARG_NO_SNAPSHOT_SAVE = "-no-snapshot-save";
-    private static final String ARG_PORTS = "-port";
+    private static final String ARG_PORTS = "-ports";
     private static final String ARG_ACCEL = "-accel";
     private static final String ARG_PROXY = "-http-proxy";
+    private static final String ARG_NO_WINDOW = "-no-window";
 
     public enum SNAPSHOT {
         NONE, PERSIST, NOT_PERSIST;
@@ -57,6 +60,7 @@ public class EmulatorCLIBuilder {
     private boolean wipe = true;
     private ProxyConfiguration proxy;
     private String avdName = Constants.SNAPSHOT_NAME;
+    private String locale;
 
     private EmulatorCLIBuilder(@CheckForNull FilePath executable) {
         if (executable == null) {
@@ -102,6 +106,11 @@ public class EmulatorCLIBuilder {
 
     public EmulatorCLIBuilder avdName(String avdName) {
         this.avdName = avdName;
+        return this;
+    }
+
+    public EmulatorCLIBuilder locale(String locale) {
+        this.locale = Util.fixEmptyAndTrim(locale);
         return this;
     }
 
@@ -169,6 +178,12 @@ public class EmulatorCLIBuilder {
             arguments.add(ARG_WIPE_DATA);
         }
 
+        if (locale != null) {
+            Locale l = Locale.forLanguageTag(locale);
+            arguments.add(ARG_PROP, "persist.sys.language=" + l.getLanguage());
+            arguments.add(ARG_PROP, "persist.sys.country=" + l.getCountry());
+        }
+
         // Network params
         arguments.add(ARG_PORTS, consolePort + "," + adbPort);
 
@@ -202,6 +217,7 @@ public class EmulatorCLIBuilder {
         // System params
         arguments.add(ARG_NO_ACCEL);
         arguments.add(ARG_ACCEL, "off");
+        arguments.add(ARG_NO_WINDOW);
 
         // UI params
         arguments.add(ARG_NO_BOOT_ANIM);

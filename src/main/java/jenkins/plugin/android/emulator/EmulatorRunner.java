@@ -24,9 +24,13 @@
 package jenkins.plugin.android.emulator;
 
 import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Properties;
 import java.util.Set;
 
 import javax.annotation.Nonnull;
@@ -94,12 +98,18 @@ public class EmulatorRunner {
         String sdkRoot = env.get(Constants.ENV_VAR_ANDROID_SDK_ROOT); // FIXME required!
 
         // write INI file
+        // FIXME write using callable
         File advConfig = new File(avdHome, config.getAVDName() + ".ini");
         if (!advConfig.exists()) {
             FileUtils.touch(advConfig);
         }
-        Ini ini = new Ini(advConfig);
-        ini.store();
+        Properties ini = new Properties();
+        try (FileReader reader = new FileReader(advConfig)) {
+            ini.load(reader);
+        }
+        try (FileWriter writer = new FileWriter(advConfig)) {
+            ini.store(writer, null);
+        }
 
         // check if virtual device already exists
         List<Targets> targets = AVDManagerCLIBuilder.create(avdManager) //
@@ -107,9 +117,6 @@ public class EmulatorRunner {
                 .listTargets() //
                 .withEnv(env) //
                 .execute();
-
-        // gather required components
-        Set<String> components = getComponents();
 
         // remove installed components
         SDKPackages packages = SDKManagerCLIBuilder.create(sdkManager) //
@@ -119,8 +126,10 @@ public class EmulatorRunner {
             .list() //
             .withEnv(env) //
             .execute();
-        packages.getInstalled().forEach(p -> components.remove(p.getId()));
 
+        // gather required components
+        Set<String> components = getComponents();
+        packages.getInstalled().forEach(p -> components.remove(p.getId()));
         if (!components.isEmpty()) {
             SDKManagerCLIBuilder.create(sdkManager) //
                     .channel(Channel.STABLE) // FIXME get that one configured in the installation tool
@@ -129,6 +138,17 @@ public class EmulatorRunner {
                     .install(components) //
                     .withEnv(env) //
                     .execute(listener);
+        }
+
+        // TODO perform update only if no one is using this tool
+        if (!packages.getUpdates().isEmpty()) {
+            SDKManagerCLIBuilder.create(sdkManager) //
+                .channel(Channel.STABLE) // FIXME get that one configured in the installation tool
+                .sdkRoot(sdkRoot) //
+                .proxy(proxy) //
+                .update(components) //
+                .withEnv(env) //
+                .execute(listener);
         }
 
          // start ADB service
@@ -144,11 +164,13 @@ public class EmulatorRunner {
                 .packagePath(getSystemComponent()) //
                 .create(config.getAVDName()) //
                 .withEnv(env) //
-                .execute();
+                .execute(listener);
 
         // start emulator
         EmulatorCLIBuilder.create(emulator) //
+                .avdName(config.getAVDName()) //
                 .dataDir(avdHome) //
+                .locale(config.getLocale()) //
                 .proxy(proxy) //
                 .build(5554) // FIXME calculate the free using the executor number, in case of multiple emulator for this executor than store into a map <Node, port> pay attention on Node that could not be saved into an aware map.
                 .withEnv(env) //

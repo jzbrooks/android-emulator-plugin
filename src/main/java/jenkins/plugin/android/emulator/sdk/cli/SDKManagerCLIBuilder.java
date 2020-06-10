@@ -31,6 +31,7 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.regex.Pattern;
 
@@ -173,6 +174,7 @@ public class SDKManagerCLIBuilder {
     private static final String ARG_CHANNEL = "--channel";
     private static final String ARG_SDK_ROOT = "--sdk_root";
     private static final String ARG_INSTALL = "--install";
+    private static final String ARG_UPDATE = "--update";
     private static final String ARG_LIST = "--list";
     private static final String ARG_PROXY_HOST = "--proxy_host";
     private static final String ARG_PROXY_PORT = "--proxy_port";
@@ -353,6 +355,30 @@ public class SDKManagerCLIBuilder {
             return "\"" + quote + "\"";
         }
         return quote;
+    }
+
+    public CLICommand<Void> update(Set<String> packages) {
+        if (packages == null || packages.isEmpty()) {
+            throw new IllegalArgumentException("At least a packge must be specified");
+        }
+
+        ArgumentListBuilder arguments = buildCommonOptions();
+
+        arguments.add(ARG_UPDATE);
+        for (String p : packages) {
+            arguments.addQuoted(p);
+        }
+
+        EnvVars env = new EnvVars();
+        try {
+            buildProxyEnvVars(env);
+        } catch (URISyntaxException e) {
+            // fallback to CLI arguments
+            buildProxyArguments(arguments);
+        }
+
+        return new CLICommand<Void>(executable, arguments, env) //
+                .withInput(StringUtils.repeat("y", "\r\n", packages.size()));
     }
 
 }

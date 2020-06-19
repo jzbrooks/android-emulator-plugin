@@ -35,5 +35,16 @@ public final class AndroidSDKConstants {
 
     public static final String ENV_ADB_TRACE = "ADB_TRACE";
     public static final String ENV_ADB_LOCAL_TRANSPORT_MAX_PORT = "ADB_LOCAL_TRANSPORT_MAX_PORT";
+    /**
+     * Location of AVD-specific data files.
+     * <p>
+     * Example: C:\Users\{@literal <}USERNAME{@literal >}\.android\avd\ or ~/.android/avd/
+     */
     public static final String ENV_ANDROID_AVD_HOME = "ANDROID_AVD_HOME";
+    /**
+     * Location of emulator-specific data files.
+     * <p>
+     * Example: C:\Users\{@literal <}USERNAME{@literal >}\.android\ or ~/.android/
+     */
+    public static final String ENV_ANDROID_EMULATOR_HOME = "ANDROID_EMULATOR_HOME";
 }

@@ -41,7 +41,7 @@ public class ADBCLIBuilder {
     private static final String ARG_START_SERVER = "start-server";
     private static final String ARG_KILL_SERVER = "kill-server";
 
-    public static ADBCLIBuilder create(@Nullable FilePath executable) {
+    public static ADBCLIBuilder with(@Nullable FilePath executable) {
         return new ADBCLIBuilder(executable);
     }
 

@@ -117,6 +117,7 @@ public class AVDManagerCLIBuilder {
     private static final String ARG_VERBOSE = "--verbose";
     private static final String ARG_CLEAR_CACHE = "--clear-cache";
     private static final String[] ARG_LIST_TARGET = new String[] { "list", "target" };
+    private static final String[] ARG_LIST_AVD = new String[] { "list", "avd" };
     private static final String[] ARG_CREATE = new String[] { "create", "avd" };
     private static final String[] ARG_DELETE = new String[] { "delete", "avd" };
     private static final String ARG_NAME = "--name";
@@ -141,7 +142,7 @@ public class AVDManagerCLIBuilder {
         this.executable = executable;
     }
 
-    public static AVDManagerCLIBuilder create(@Nullable FilePath executable) {
+    public static AVDManagerCLIBuilder with(@Nullable FilePath executable) {
         return new AVDManagerCLIBuilder(executable);
     }
 
@@ -205,14 +206,26 @@ public class AVDManagerCLIBuilder {
         arguments.add(ARG_FORCE);
 
         return new CLICommand<Void>(executable, arguments, new EnvVars()) //
-                // fix a bug in script or come where to get the SDK root raise
-                // up two parent instead of one
+                // fix a bug in windows script where calculates wrong the
+                // SDK root because raising up two parent instead of one
                 .withEnv("AVDMANAGER_OPTS", "-Dcom.android.sdkmanager.toolsdir=" + executable.getParent().getRemote()) //
                 // FIXME hardware profiles??
                 .withInput("\r\n");
     }
 
     public CLICommand<List<Targets>> listTargets() {
+        ArgumentListBuilder arguments = new ArgumentListBuilder();
+
+        addGlobalOptions(arguments);
+
+        // action
+        arguments.add(ARG_LIST_TARGET);
+
+        return new CLICommand<List<Targets>>(executable, arguments, new EnvVars()) //
+                .withParser(new ListTargetParser());
+    }
+
+    public CLICommand<List<Targets>> listAVD() {
         ArgumentListBuilder arguments = new ArgumentListBuilder();
 
         addGlobalOptions(arguments);

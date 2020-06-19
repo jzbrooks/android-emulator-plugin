@@ -25,7 +25,7 @@ import hudson.util.Secret;
  */
 public class EmulatorCLIBuilder {
     private static final String ARG_NO_BOOT_ANIM = "-no-boot-anim";
-    private static final String ARG_NO_ACCEL = "-no-accel";
+    private static final String ARG_NO_AUDIO = "-no-audio";
     private static final String ARG_WIPE_DATA = "-wipe-data";
     private static final String ARG_PROP = "-prop";
     private static final String ARG_MEMORY = "-memory";
@@ -47,7 +47,7 @@ public class EmulatorCLIBuilder {
         NONE, EMULATED;
     }
 
-    public static EmulatorCLIBuilder create(@Nullable FilePath executable) {
+    public static EmulatorCLIBuilder with(@Nullable FilePath executable) {
         return new EmulatorCLIBuilder(executable);
     }
 
@@ -169,6 +169,8 @@ public class EmulatorCLIBuilder {
         default:
         }
 
+        arguments.add(ARG_NO_AUDIO);
+
         // Disk Images and Memory params
         if (memory != -1) {
             arguments.add(ARG_MEMORY, String.valueOf(memory));
@@ -215,8 +217,7 @@ public class EmulatorCLIBuilder {
         }
 
         // System params
-        arguments.add(ARG_NO_ACCEL);
-        arguments.add(ARG_ACCEL, "off");
+        arguments.add(ARG_ACCEL, "auto");
         arguments.add(ARG_NO_WINDOW);
 
         // UI params

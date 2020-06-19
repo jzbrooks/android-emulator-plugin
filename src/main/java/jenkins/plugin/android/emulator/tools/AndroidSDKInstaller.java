@@ -170,7 +170,7 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
         String remoteSDKRoot = sdkRoot.getRemote();
 
         // TODO cache available packages for a configurable amount of hours
-        SDKPackages packages = SDKManagerCLIBuilder.create(sdkmanager) //
+        SDKPackages packages = SDKManagerCLIBuilder.with(sdkmanager) //
                 .proxy(Jenkins.get().proxy) //
                 .sdkRoot(remoteSDKRoot) //
                 .channel(channel) //
@@ -206,7 +206,7 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
                     .sorted(Collections.reverseOrder()) // for wildcards we takes latest version
                     .findFirst().get().getId()));
     
-            SDKManagerCLIBuilder.create(sdkmanager) //
+            SDKManagerCLIBuilder.with(sdkmanager) //
                     .obsolete(true) //
                     .proxy(Jenkins.get().proxy) //
                     .sdkRoot(remoteSDKRoot) //

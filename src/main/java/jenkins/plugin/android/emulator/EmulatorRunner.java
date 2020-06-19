@@ -27,6 +27,8 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -38,7 +40,6 @@ import javax.annotation.Nullable;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
-import org.ini4j.Ini;
 
 import hudson.AbortException;
 import hudson.EnvVars;
@@ -47,6 +48,7 @@ import hudson.Launcher;
 import hudson.ProxyConfiguration;
 import hudson.model.TaskListener;
 import hudson.plugins.android_emulator.Constants;
+import hudson.remoting.Util;
 import jenkins.model.Jenkins;
 import jenkins.plugin.android.emulator.sdk.cli.ADBCLIBuilder;
 import jenkins.plugin.android.emulator.sdk.cli.AVDManagerCLIBuilder;
@@ -97,77 +99,59 @@ public class EmulatorRunner {
         String avdHome = env.get(AndroidSDKConstants.ENV_ANDROID_AVD_HOME);
         String sdkRoot = env.get(Constants.ENV_VAR_ANDROID_SDK_ROOT); // FIXME required!
 
-        // write INI file
-        // FIXME write using callable
-        File advConfig = new File(avdHome, config.getAVDName() + ".ini");
-        if (!advConfig.exists()) {
-            FileUtils.touch(advConfig);
-        }
-        Properties ini = new Properties();
-        try (FileReader reader = new FileReader(advConfig)) {
-            ini.load(reader);
-        }
-        try (FileWriter writer = new FileWriter(advConfig)) {
-            ini.store(writer, null);
-        }
-
-        // check if virtual device already exists
-        List<Targets> targets = AVDManagerCLIBuilder.create(avdManager) //
-                .silent(true) //
-                .listTargets() //
-                .withEnv(env) //
-                .execute();
-
         // remove installed components
-        SDKPackages packages = SDKManagerCLIBuilder.create(sdkManager) //
+        SDKPackages packages = SDKManagerCLIBuilder.with(sdkManager) //
             .channel(Channel.STABLE) // FIXME get that one configured in the installation tool
             .sdkRoot(sdkRoot) //
             .proxy(proxy) //
             .list() //
             .withEnv(env) //
             .execute();
+        listener.getLogger().println("SDK Manager is reading installed components");
 
         // gather required components
         Set<String> components = getComponents();
         packages.getInstalled().forEach(p -> components.remove(p.getId()));
         if (!components.isEmpty()) {
-            SDKManagerCLIBuilder.create(sdkManager) //
+            SDKManagerCLIBuilder.with(sdkManager) //
                     .channel(Channel.STABLE) // FIXME get that one configured in the installation tool
                     .sdkRoot(sdkRoot) //
                     .proxy(proxy) //
                     .install(components) //
                     .withEnv(env) //
-                    .execute(listener);
+                    .execute();
+            listener.getLogger().println("SDK Manager is installing " + StringUtils.join(components, ' '));
         }
 
-        // TODO perform update only if no one is using this tool
-        if (!packages.getUpdates().isEmpty()) {
-            SDKManagerCLIBuilder.create(sdkManager) //
-                .channel(Channel.STABLE) // FIXME get that one configured in the installation tool
-                .sdkRoot(sdkRoot) //
-                .proxy(proxy) //
-                .update(components) //
-                .withEnv(env) //
-                .execute(listener);
-        }
-
-         // start ADB service
-        ADBCLIBuilder.create(adb) //
+        // start ADB service
+        ADBCLIBuilder.with(adb) //
                 .maxEmulators(1) // FIXME set equals to the number of node executors
                 .start() //
                 .withEnv(env) //
                 .execute(listener);
 
+
+        // check there are running device
+        List<Targets> targets = AVDManagerCLIBuilder.with(avdManager) //
+                .silent(true) //
+                .listTargets() //
+                .withEnv(env) //
+                .execute();
+
         // create device
-        AVDManagerCLIBuilder.create(avdManager) //
+        listener.getLogger().println("AVD Manager is creating a new device named " + config.getAVDName() + " with sysimage " + getSystemComponent());
+        AVDManagerCLIBuilder.with(avdManager) //
                 .silent(true) //
                 .packagePath(getSystemComponent()) //
                 .create(config.getAVDName()) //
                 .withEnv(env) //
-                .execute(listener);
+                .execute();
+
+        // create AVD descriptor file
+        writeConfigFile(new FilePath(avdManager.getChannel(), avdHome));
 
         // start emulator
-        EmulatorCLIBuilder.create(emulator) //
+        EmulatorCLIBuilder.with(emulator) //
                 .avdName(config.getAVDName()) //
                 .dataDir(avdHome) //
                 .locale(config.getLocale()) //
@@ -175,6 +159,21 @@ public class EmulatorRunner {
                 .build(5554) // FIXME calculate the free using the executor number, in case of multiple emulator for this executor than store into a map <Node, port> pay attention on Node that could not be saved into an aware map.
                 .withEnv(env) //
                 .execute(listener);
+    }
+
+    private void writeConfigFile(FilePath avdHome) throws IOException, InterruptedException {
+        FilePath advPath = avdHome.child(config.getAVDName() + ".avd");
+        FilePath advConfig = avdHome.child(config.getAVDName() + ".ini");
+
+        String remoteAVDPath = advPath.getRemote();
+        String remoteAndroidHome = avdHome.getParent().getRemote();
+
+        advConfig.touch(new Date().getTime());
+        String content = "avd.ini.encoding=UTF-8\n" + 
+                "path=" + remoteAVDPath + "\n" +
+                "path.rel=" + remoteAVDPath.substring(remoteAndroidHome.length() + 1) + "\n" +
+                "target=" + config.getOSVersion();
+        advConfig.write(content, "UTF-8");
     }
 
     private Set<String> getComponents() {

@@ -195,7 +195,7 @@ public class SDKManagerCLIBuilder {
         this.executable = sdkmanager;
     }
 
-    public static SDKManagerCLIBuilder create(@Nonnull FilePath sdkmanager) {
+    public static SDKManagerCLIBuilder with(@Nonnull FilePath sdkmanager) {
         return new SDKManagerCLIBuilder(sdkmanager);
     }
 

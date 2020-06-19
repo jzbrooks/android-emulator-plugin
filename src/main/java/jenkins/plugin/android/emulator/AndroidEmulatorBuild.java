@@ -132,7 +132,9 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
         // configure home location
         FilePath homeLocation = homeLocationStrategy.locate(workspace);
         if (homeLocation != null) {
-            context.env(Constants.ENV_VAR_ANDROID_SDK_HOME, homeLocation.getRemote());
+            String localData = homeLocation.getRemote();
+            context.env(Constants.ENV_VAR_ANDROID_SDK_HOME, localData);
+            context.env(AndroidSDKConstants.ENV_ANDROID_EMULATOR_HOME, localData);
             context.env(AndroidSDKConstants.ENV_ANDROID_AVD_HOME, homeLocation.child("avd").getRemote());
         }
 

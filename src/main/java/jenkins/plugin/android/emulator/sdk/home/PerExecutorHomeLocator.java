@@ -62,7 +62,7 @@ public class PerExecutorHomeLocator extends HomeLocator {
         if (rootPath == null || executor == null) {
             return null;
         }
-        return rootPath.child("android_" + executor.getNumber()).child(AndroidSDKConstants.ANDROID_CACHE);
+        return rootPath.child("android_" + executor.getNumber());
     }
 
     @Extension

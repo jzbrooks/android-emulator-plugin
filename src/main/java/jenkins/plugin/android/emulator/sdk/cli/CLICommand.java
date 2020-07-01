@@ -27,8 +27,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,11 +38,12 @@ import org.apache.tools.ant.filters.StringInputStream;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher.ProcStarter;
+import hudson.Proc;
 import hudson.model.TaskListener;
 import hudson.util.ArgumentListBuilder;
+import hudson.util.ForkOutputStream;
 import hudson.util.NullStream;
 import hudson.util.StreamTaskListener;
-import net.kemitix.wrapper.printstream.PrintStreamWrapper;
 
 public class CLICommand<R> {
 
@@ -98,7 +97,7 @@ public class CLICommand<R> {
         if (output != null) {
             if (parser != null) {
                 // clone output to make content available to the parser
-                starter.stdout(new StreamTaskListener((OutputStream) PrintStreamWrapper.copy(output.getLogger(), new PrintStream(baos))));
+                starter.stdout(new ForkOutputStream(output.getLogger(), baos));
             } else {
                 starter.stdout(output);
             }
@@ -115,6 +114,24 @@ public class CLICommand<R> {
             return parser.parse(new ByteArrayInputStream(baos.toByteArray()));
         }
         return null;
+    }
+
+    public Proc executeAsync(@Nullable TaskListener output) throws IOException, InterruptedException {
+        List<String> args = getArguments();
+
+        // command.createLauncher(output)
+        ProcStarter starter = command.createLauncher(output).launch() //
+                .envs(env) //
+                .stdin(stdin) //
+                .pwd(root == null ? command.getParent() : root) //
+                .cmds(args) //
+                .masks(getMasks(args.size()));
+
+        if (output != null) {
+            starter.stdout(output);
+        }
+
+        return starter.start();
     }
 
     private boolean[] getMasks(final int size) {

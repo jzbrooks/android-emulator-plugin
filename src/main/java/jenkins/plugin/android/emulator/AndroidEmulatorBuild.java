@@ -109,7 +109,6 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
 
     @Override
     public void setUp(Context context, Run<?, ?> build, FilePath workspace, Launcher launcher, TaskListener listener, EnvVars initialEnvironment) throws IOException, InterruptedException {
-//        if (1 - 1 == 0) { return; }
         // get specific installation for the node
         AndroidSDKInstallation sdk = AndroidSDKUtil.getAndroidSDK(emulatorTool);
         if (sdk == null) {
@@ -132,10 +131,14 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
         // configure home location
         FilePath homeLocation = homeLocationStrategy.locate(workspace);
         if (homeLocation != null) {
-            String localData = homeLocation.getRemote();
-            context.env(Constants.ENV_VAR_ANDROID_SDK_HOME, localData);
-            context.env(AndroidSDKConstants.ENV_ANDROID_EMULATOR_HOME, localData);
-            context.env(AndroidSDKConstants.ENV_ANDROID_AVD_HOME, homeLocation.child("avd").getRemote());
+            context.env(Constants.ENV_VAR_ANDROID_SDK_HOME, homeLocation.getRemote());
+
+            FilePath emulatorLocation = homeLocation.child(AndroidSDKConstants.ANDROID_CACHE);
+            context.env(AndroidSDKConstants.ENV_ANDROID_EMULATOR_HOME, emulatorLocation.getRemote());
+
+            FilePath avdPath = emulatorLocation.child("avd");
+            avdPath.mkdirs(); // ensure that this folder exists
+            context.env(AndroidSDKConstants.ENV_ANDROID_AVD_HOME, avdPath.getRemote());
         }
 
         // replace variable in user input
@@ -152,6 +155,7 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
         config.setHardware(hardwareProperties.stream() //
                 .map(p -> new HardwareProperty(Util.replaceMacro(p.getKey(), env), Util.replaceMacro(p.getValue(), env))) //
                 .collect(Collectors.toList()));
+        config.setReportPort(55000); // FIXME
 
         // validate input
         Collection<ValidationError> errors = config.validate();

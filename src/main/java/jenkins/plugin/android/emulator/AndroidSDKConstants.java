@@ -36,15 +36,23 @@ public final class AndroidSDKConstants {
     public static final String ENV_ADB_TRACE = "ADB_TRACE";
     public static final String ENV_ADB_LOCAL_TRANSPORT_MAX_PORT = "ADB_LOCAL_TRANSPORT_MAX_PORT";
     /**
-     * Location of AVD-specific data files.
+     * Sets the path to the directory that contains all AVD-specific files,
+     * which mostly consist of very large disk images.
      * <p>
-     * Example: C:\Users\{@literal <}USERNAME{@literal >}\.android\avd\ or ~/.android/avd/
+     * The default location is $ANDROID_EMULATOR_HOME/avd/. You might want to
+     * specify a new location if the default location is low on disk space.
      */
     public static final String ENV_ANDROID_AVD_HOME = "ANDROID_AVD_HOME";
     /**
-     * Location of emulator-specific data files.
+     * Sets the path to the user-specific emulator configuration directory.
      * <p>
-     * Example: C:\Users\{@literal <}USERNAME{@literal >}\.android\ or ~/.android/
+     * The default location is $ANDROID_SDK_HOME/.android/.
      */
     public static final String ENV_ANDROID_EMULATOR_HOME = "ANDROID_EMULATOR_HOME";
+
+    /**
+     * The Android Debug Bridge (adb) server default TCP port. 
+     */
+    public static final int ADB_DEFAULT_SERVER_PORT = 5037;
+    public static final int ADB_CONNECT_TIMEOUT_MS = 60 * 1000;
 }

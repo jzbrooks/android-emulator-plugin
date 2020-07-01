@@ -168,6 +168,7 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
         FilePath sdkmanager = sdkRoot.child("tools").child("bin").child("sdkmanager" + platform.extension);
 
         String remoteSDKRoot = sdkRoot.getRemote();
+        String androidHome = getSDKHome(sdkRoot).getRemote();
 
         // TODO cache available packages for a configurable amount of hours
         SDKPackages packages = SDKManagerCLIBuilder.with(sdkmanager) //
@@ -175,10 +176,10 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
                 .sdkRoot(remoteSDKRoot) //
                 .channel(channel) //
                 .list() //
-                .withEnv(Constants.ENV_VAR_ANDROID_SDK_HOME, remoteSDKRoot) //
+                .withEnv(Constants.ENV_VAR_ANDROID_SDK_HOME, androidHome) //
                 .execute();
 
-        // remove installed components
+        // remove components already installed
         List<String> defaultPackages = DEFAULT_PACKAGES.stream() //
                 .filter(defaultPackage -> packages.getInstalled().stream().noneMatch(i -> {
                     if (defaultPackage.endsWith("*")) {
@@ -203,17 +204,16 @@ public class AndroidSDKInstaller extends DownloadFromUrlInstaller {
                     })
                     // remove release candidate versions for stable channel
                     .filter(p -> channel != Channel.STABLE || p.getVersion().getQualifier() == null) //
-                    .sorted(Collections.reverseOrder()) // for wildcards we takes latest version
+                    .sorted(Collections.reverseOrder()) // in case of wildcards we takes latest version
                     .findFirst().get().getId()));
-    
+
             SDKManagerCLIBuilder.with(sdkmanager) //
-                    .obsolete(true) //
                     .proxy(Jenkins.get().proxy) //
                     .sdkRoot(remoteSDKRoot) //
                     .channel(channel) //
                     .install(components) //
-                    .withEnv(Constants.ENV_VAR_ANDROID_SDK_HOME, remoteSDKRoot) //
-                    .execute();
+                    .withEnv(Constants.ENV_VAR_ANDROID_SDK_HOME, androidHome) //
+                    .execute(log);
         }
     }
 

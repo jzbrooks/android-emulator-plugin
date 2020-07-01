@@ -46,7 +46,7 @@ public class PerJobHomeLocator extends HomeLocator {
 
     @Override
     public FilePath locate(@Nonnull FilePath workspace) {
-        return workspace.child(AndroidSDKConstants.ANDROID_CACHE);
+        return workspace;
     }
 
     @Extension

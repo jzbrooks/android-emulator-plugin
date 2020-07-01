@@ -23,22 +23,15 @@
  */
 package jenkins.plugin.android.emulator;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Properties;
 import java.util.Set;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 
 import hudson.AbortException;
@@ -48,14 +41,16 @@ import hudson.Launcher;
 import hudson.ProxyConfiguration;
 import hudson.model.TaskListener;
 import hudson.plugins.android_emulator.Constants;
-import hudson.remoting.Util;
+import hudson.plugins.android_emulator.Messages;
+import hudson.plugins.android_emulator.ReceiveEmulatorPortTask;
 import jenkins.model.Jenkins;
 import jenkins.plugin.android.emulator.sdk.cli.ADBCLIBuilder;
 import jenkins.plugin.android.emulator.sdk.cli.AVDManagerCLIBuilder;
+import jenkins.plugin.android.emulator.sdk.cli.AVDevice;
 import jenkins.plugin.android.emulator.sdk.cli.EmulatorCLIBuilder;
+import jenkins.plugin.android.emulator.sdk.cli.EmulatorCLIBuilder.SNAPSHOT;
 import jenkins.plugin.android.emulator.sdk.cli.SDKManagerCLIBuilder;
 import jenkins.plugin.android.emulator.sdk.cli.SDKPackages;
-import jenkins.plugin.android.emulator.sdk.cli.Targets;
 import jenkins.plugin.android.emulator.tools.AndroidSDKInstaller.Channel;
 import jenkins.plugin.android.emulator.tools.ToolLocator;
 
@@ -123,42 +118,61 @@ public class EmulatorRunner {
             listener.getLogger().println("SDK Manager is installing " + StringUtils.join(components, ' '));
         }
 
-        // start ADB service
-        ADBCLIBuilder.with(adb) //
-                .maxEmulators(1) // FIXME set equals to the number of node executors
-                .start() //
-                .withEnv(env) //
-                .execute(listener);
-
-
-        // check there are running device
-        List<Targets> targets = AVDManagerCLIBuilder.with(avdManager) //
+        // check if there are running device
+        List<AVDevice> devices = AVDManagerCLIBuilder.with(avdManager) //
                 .silent(true) //
-                .listTargets() //
+                .listAVD() //
                 .withEnv(env) //
                 .execute();
 
-        // create device
-        listener.getLogger().println("AVD Manager is creating a new device named " + config.getAVDName() + " with sysimage " + getSystemComponent());
+        if (devices.stream().anyMatch(d -> config.getAVDName().equals(d.getName()))) {
+            listener.getLogger().println("Android Virtual Device " + config.getAVDName() + " already exist, removing...");
+
+            AVDManagerCLIBuilder.with(avdManager) //
+                    .silent(true) //
+                    .deleteAVD(config.getAVDName()) //
+                    .withEnv(env) //
+                    .execute();
+        }
+
+        // create new device
+        listener.getLogger().println("AVD Manager is creating a new device named " + config.getAVDName() + " using sysimage "
+                + getSystemComponent());
+        
         AVDManagerCLIBuilder.with(avdManager) //
                 .silent(true) //
                 .packagePath(getSystemComponent()) //
                 .create(config.getAVDName()) //
                 .withEnv(env) //
                 .execute();
-
+        
         // create AVD descriptor file
         writeConfigFile(new FilePath(avdManager.getChannel(), avdHome));
+
+        // start ADB service
+        ADBCLIBuilder.with(adb) //
+                .maxEmulators(1) // FIXME set equals to the number of node executors
+                .port(config.getADBServerPort()) //
+                .start() //
+                .withEnv(env) //
+                .execute();
 
         // start emulator
         EmulatorCLIBuilder.with(emulator) //
                 .avdName(config.getAVDName()) //
                 .dataDir(avdHome) //
                 .locale(config.getLocale()) //
+                .reportConsolePort(config.getReportPort()) // FIXME
                 .proxy(proxy) //
+                .quickBoot(SNAPSHOT.NOT_PERSIST)
                 .build(5554) // FIXME calculate the free using the executor number, in case of multiple emulator for this executor than store into a map <Node, port> pay attention on Node that could not be saved into an aware map.
                 .withEnv(env) //
-                .execute(listener);
+                .executeAsync(listener);
+
+        Integer port = workspace.act(new ReceiveEmulatorPortTask(config.getReportPort(), config.getADBConnectionTimeout()));
+        if (port <= 0) {
+            throw new IOException(Messages.EMULATOR_DID_NOT_START()); // FIXME
+        }
     }
 
     private void writeConfigFile(FilePath avdHome) throws IOException, InterruptedException {

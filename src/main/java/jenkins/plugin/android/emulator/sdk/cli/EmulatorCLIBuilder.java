@@ -16,6 +16,7 @@ import hudson.Util;
 import hudson.plugins.android_emulator.Constants;
 import hudson.util.ArgumentListBuilder;
 import hudson.util.Secret;
+import jenkins.plugin.android.emulator.AndroidSDKConstants;
 
 /**
  * Build a command line argument for emulator command.
@@ -61,12 +62,24 @@ public class EmulatorCLIBuilder {
     private ProxyConfiguration proxy;
     private String avdName = Constants.SNAPSHOT_NAME;
     private String locale;
+    private int reportConsolePort = -1;
+    private int reportConsoleTimeout = AndroidSDKConstants.ADB_CONNECT_TIMEOUT_MS / 1000;
 
     private EmulatorCLIBuilder(@CheckForNull FilePath executable) {
         if (executable == null) {
             throw new IllegalArgumentException("Invalid empty or null executable");
         }
         this.executable = executable;
+    }
+
+    public EmulatorCLIBuilder reportConsolePort(int port) {
+        this.reportConsolePort = port;
+        return this;
+    }
+
+    public EmulatorCLIBuilder reportConsoleTimeout(int timeout) {
+        this.reportConsoleTimeout = timeout;
+        return this;
     }
 
     public EmulatorCLIBuilder proxy(ProxyConfiguration proxy) {
@@ -122,6 +135,7 @@ public class EmulatorCLIBuilder {
         if (consolePort < 5554) {
             throw new IllegalArgumentException("Emulator port must be greater or equals than 5554");
         }
+        EnvVars env = new EnvVars();
         ArgumentListBuilder arguments = new ArgumentListBuilder();
 
         if (avdName == null) {
@@ -170,6 +184,7 @@ public class EmulatorCLIBuilder {
         }
 
         arguments.add(ARG_NO_AUDIO);
+        env.put(Constants.ENV_VAR_QEMU_AUDIO_DRV, "none");
 
         // Disk Images and Memory params
         if (memory != -1) {
@@ -223,7 +238,11 @@ public class EmulatorCLIBuilder {
         // UI params
         arguments.add(ARG_NO_BOOT_ANIM);
 
-        return new CLICommand<>(executable, arguments, new EnvVars());
+        if (reportConsolePort > 0) {
+            arguments.add("-report-console", "tcp:" + reportConsolePort + ",max=" + reportConsoleTimeout);
+        }
+
+        return new CLICommand<>(executable, arguments, env);
     }
 
 }

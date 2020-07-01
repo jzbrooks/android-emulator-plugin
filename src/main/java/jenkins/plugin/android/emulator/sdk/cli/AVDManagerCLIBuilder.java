@@ -113,6 +113,93 @@ public class AVDManagerCLIBuilder {
 
     }
 
+    static class ListAVDParser implements OutputParser<List<AVDevice>> {
+
+        @Override
+        public List<AVDevice> parse(InputStream input) throws IOException {
+            List<AVDevice> devices = new ArrayList<>();
+
+            boolean context = false; // indicates when the useful text starting
+            // for parsing
+            AVDevice device = null;
+            for (String line : IOUtils.readLines(input, "UTF-8")) { // NOSONAR
+                line = Util.fixEmptyAndTrim(line);
+                if (StringUtils.isBlank(line)) {
+                    continue;
+                }
+
+                String lcLine = line.toLowerCase();
+                if (!context || isHeader(lcLine) || lcLine.contains("android virtual devices could not be loaded")) {
+                    context |= lcLine.startsWith("available android virtual devices");
+                    continue;
+                }
+
+                String key = getKey(lcLine);
+                String value = getValue(line);
+                if (value != null) {
+                    switch (key) {
+                    case "name":
+                        device = new AVDevice();
+                        device.setName(value);
+                        devices.add(device);
+                        break;
+                    case "path":
+                        if (device != null) {
+                            device.setPath(value);
+                        }
+                        break;
+                    case "target":
+                        if (device != null) {
+                            device.setTarget(value);
+                        }
+                        break;
+                    case "based on":
+                        if (device != null) {
+                            device.setAndroidOS(value);
+                        }
+                        break;
+                    case "tag/abi":
+                        if (device != null) {
+                            device.setAndroidOS(value);
+                        }
+                        break;
+                    case "sdcard":
+                        if (device != null) {
+                            device.setSDCard(value);
+                        }
+                        break;
+                    case "error":
+                        if (device != null) {
+                            device.setError(value);
+                        }
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
+            return devices;
+        }
+
+        private String getValue(String line) {
+            String[] split = line.split(":");
+            if (split.length > 1) {
+                return Util.fixEmptyAndTrim(split[1]);
+            } else {
+                return null;
+            }
+        }
+
+        private String getKey(String lcLine) {
+            return lcLine.split(":")[0];
+        }
+
+        private boolean isHeader(String lcLine) {
+            return lcLine.startsWith("-") || lcLine.contains("loading local repository");
+        }
+
+    }
+
     private static final String ARG_SILENT = "--silent";
     private static final String ARG_VERBOSE = "--verbose";
     private static final String ARG_CLEAR_CACHE = "--clear-cache";
@@ -222,19 +309,25 @@ public class AVDManagerCLIBuilder {
         arguments.add(ARG_LIST_TARGET);
 
         return new CLICommand<List<Targets>>(executable, arguments, new EnvVars()) //
+                // fix a bug in windows script where calculates wrong the
+                // SDK root because raising up two parent instead of one
+                .withEnv("AVDMANAGER_OPTS", "-Dcom.android.sdkmanager.toolsdir=" + executable.getParent().getRemote()) //
                 .withParser(new ListTargetParser());
     }
 
-    public CLICommand<List<Targets>> listAVD() {
+    public CLICommand<List<AVDevice>> listAVD() {
         ArgumentListBuilder arguments = new ArgumentListBuilder();
 
         addGlobalOptions(arguments);
 
         // action
-        arguments.add(ARG_LIST_TARGET);
+        arguments.add(ARG_LIST_AVD);
 
-        return new CLICommand<List<Targets>>(executable, arguments, new EnvVars()) //
-                .withParser(new ListTargetParser());
+        return new CLICommand<List<AVDevice>>(executable, arguments, new EnvVars()) //
+                // fix a bug in windows script where calculates wrong the
+                // SDK root because raising up two parent instead of one
+                .withEnv("AVDMANAGER_OPTS", "-Dcom.android.sdkmanager.toolsdir=" + executable.getParent().getRemote()) //
+                .withParser(new ListAVDParser());
     }
 
     private void addGlobalOptions(ArgumentListBuilder arguments) {

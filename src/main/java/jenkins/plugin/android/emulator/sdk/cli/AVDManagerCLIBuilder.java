@@ -292,12 +292,18 @@ public class AVDManagerCLIBuilder {
         }
         arguments.add(ARG_FORCE);
 
-        return new CLICommand<Void>(executable, arguments, new EnvVars()) //
-                // fix a bug in windows script where calculates wrong the
-                // SDK root because raising up two parent instead of one
-                .withEnv("AVDMANAGER_OPTS", "-Dcom.android.sdkmanager.toolsdir=" + executable.getParent().getRemote()) //
+        EnvVars env = new EnvVars();
+        additionalEnv(env);
+
+        return new CLICommand<Void>(executable, arguments, env) //
                 // FIXME hardware profiles??
                 .withInput("\r\n");
+    }
+
+    private void additionalEnv(EnvVars env) {
+        // fix a bug in windows script where calculates wrong the
+        // SDK root because raising up two parent instead of one
+        env.put("AVDMANAGER_OPTS", "-Dcom.android.sdkmanager.toolsdir=" + executable.getParent().getRemote());
     }
 
     public CLICommand<List<Targets>> listTargets() {
@@ -308,10 +314,10 @@ public class AVDManagerCLIBuilder {
         // action
         arguments.add(ARG_LIST_TARGET);
 
+        EnvVars env = new EnvVars();
+        additionalEnv(env);
+
         return new CLICommand<List<Targets>>(executable, arguments, new EnvVars()) //
-                // fix a bug in windows script where calculates wrong the
-                // SDK root because raising up two parent instead of one
-                .withEnv("AVDMANAGER_OPTS", "-Dcom.android.sdkmanager.toolsdir=" + executable.getParent().getRemote()) //
                 .withParser(new ListTargetParser());
     }
 
@@ -323,10 +329,10 @@ public class AVDManagerCLIBuilder {
         // action
         arguments.add(ARG_LIST_AVD);
 
+        EnvVars env = new EnvVars();
+        additionalEnv(env);
+
         return new CLICommand<List<AVDevice>>(executable, arguments, new EnvVars()) //
-                // fix a bug in windows script where calculates wrong the
-                // SDK root because raising up two parent instead of one
-                .withEnv("AVDMANAGER_OPTS", "-Dcom.android.sdkmanager.toolsdir=" + executable.getParent().getRemote()) //
                 .withParser(new ListAVDParser());
     }
 
@@ -360,7 +366,10 @@ public class AVDManagerCLIBuilder {
         // action options
         arguments.add(ARG_NAME, name);
 
-        return new CLICommand<>(executable, arguments, new EnvVars());
+        EnvVars env = new EnvVars();
+        additionalEnv(env);
+
+        return new CLICommand<>(executable, arguments, env);
     }
 
 }

@@ -98,6 +98,9 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
     private String avdName;
     private List<HardwareProperty> hardwareProperties = new ArrayList<>();
 
+    // advanced options
+    private int adbTimeout;
+
     @DataBoundConstructor
     public AndroidEmulatorBuild(@CheckForNull String emulatorTool, String osVersion, String screenDensity, String screenResolution) {
         this.emulatorTool = Util.fixEmptyAndTrim(emulatorTool);
@@ -155,6 +158,7 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
         config.setHardware(hardwareProperties.stream() //
                 .map(p -> new HardwareProperty(Util.replaceMacro(p.getKey(), env), Util.replaceMacro(p.getValue(), env))) //
                 .collect(Collectors.toList()));
+        config.setADBConnectionTimeout(adbTimeout * 1000);
         config.setReportPort(55000); // FIXME
 
         // validate input
@@ -264,6 +268,15 @@ public class AndroidEmulatorBuild extends SimpleBuildWrapper {
     @DataBoundSetter
     public void setHardwareProperties(List<HardwareProperty> hardwareProperties) {
         this.hardwareProperties = hardwareProperties;
+    }
+
+    public int getAdbTimeout() {
+        return adbTimeout == 0 ? AndroidSDKConstants.ADB_CONNECT_TIMEOUT : adbTimeout;
+    }
+
+    @DataBoundSetter
+    public void setAdbTimeout(int adbTimeout) {
+        this.adbTimeout = adbTimeout;
     }
 
     @Symbol("androidEmulator")

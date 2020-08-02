@@ -16,7 +16,6 @@ import hudson.Util;
 import hudson.plugins.android_emulator.Constants;
 import hudson.util.ArgumentListBuilder;
 import hudson.util.Secret;
-import jenkins.plugin.android.emulator.AndroidSDKConstants;
 
 /**
  * Build a command line argument for emulator command.
@@ -63,7 +62,7 @@ public class EmulatorCLIBuilder {
     private String avdName = Constants.SNAPSHOT_NAME;
     private String locale;
     private int reportConsolePort = -1;
-    private int reportConsoleTimeout = AndroidSDKConstants.ADB_CONNECT_TIMEOUT_MS / 1000;
+    private int reportConsoleTimeout;
 
     private EmulatorCLIBuilder(@CheckForNull FilePath executable) {
         if (executable == null) {

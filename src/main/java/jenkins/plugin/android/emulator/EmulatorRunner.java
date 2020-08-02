@@ -162,6 +162,7 @@ public class EmulatorRunner {
                 .avdName(config.getAVDName()) //
                 .dataDir(avdHome) //
                 .locale(config.getLocale()) //
+                .reportConsoleTimeout(config.getADBConnectionTimeout()) //
                 .reportConsolePort(config.getReportPort()) // FIXME
                 .proxy(proxy) //
                 .quickBoot(SNAPSHOT.NOT_PERSIST)

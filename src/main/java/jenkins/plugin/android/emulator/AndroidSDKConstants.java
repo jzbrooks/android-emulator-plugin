@@ -54,5 +54,5 @@ public final class AndroidSDKConstants {
      * The Android Debug Bridge (adb) server default TCP port. 
      */
     public static final int ADB_DEFAULT_SERVER_PORT = 5037;
-    public static final int ADB_CONNECT_TIMEOUT_MS = 60 * 1000;
+    public static final int ADB_CONNECT_TIMEOUT = 60;
 }

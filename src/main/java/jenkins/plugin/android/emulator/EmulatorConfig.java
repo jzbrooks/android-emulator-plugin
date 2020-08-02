@@ -57,7 +57,7 @@ public class EmulatorConfig {
     private String targetABI;
     private List<HardwareProperty> hardwareProperties;
     private int adbServerPort = AndroidSDKConstants.ADB_DEFAULT_SERVER_PORT;
-    private int adbConnectionTimeout = AndroidSDKConstants.ADB_CONNECT_TIMEOUT_MS;
+    private int adbConnectionTimeout;
     private int reportConsolePort = 50000;
 
     public void setADBServerPort(int port) {

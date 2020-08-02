@@ -75,4 +75,11 @@ THE SOFTWARE.
         </f:repetableProperty>
     </f:entry>
 
+    <f:advanced title="${%options.title}">
+        <f:advanced>
+            <f:entry title="${%advanced.adbTimeout.title}" field="adbTimeout" description="${%advanced.adbTimeout.description}">
+                <f:number default="60" />
+            </f:entry>
+        </f:advanced>
+    </f:advanced>
 </j:jelly>
